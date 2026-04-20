@@ -26,7 +26,7 @@ function readSidebarCollapsed(): boolean {
 }
 
 export function AppShell() {
-  const { exportDatabaseFile, persistNow, clearAllLocalData, getDb, version } =
+  const { exportDatabaseFile, persistNow, clearAllLocalData, getDb, version, dbEpoch } =
     useFinanceDb();
 
   const [sidebarCollapsed, setSidebarCollapsed] =
@@ -317,7 +317,8 @@ export function AppShell() {
         </div>
       </motion.aside>
       <main className="min-w-0 flex-1">
-        <Outlet />
+        {/* dbEpoch só muda ao trocar o .sqlite inteiro — remonta a rota sem resetar a cada edição */}
+        <Outlet key={dbEpoch} />
       </main>
     </div>
   );

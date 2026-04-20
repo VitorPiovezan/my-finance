@@ -33,6 +33,13 @@ import { syncDriveToDatabase } from '../lib/sync/driveSync'
 import type { Row } from '../lib/db/query'
 import { newId } from '../lib/id'
 
+/** Após o fluxo OAuth (popup), um tick extra evita corrida com o fechamento da janela e com a sessão. */
+const AFTER_OAUTH_DELAY_MS = 350
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export function SyncPage() {
   const {
     getDb,
@@ -74,6 +81,69 @@ export function SyncPage() {
     setLog((prev) => [...prev.slice(-200), `[${new Date().toLocaleTimeString('pt-BR')}] ${line}`])
   }, [])
 
+  /** Upload com token explícito (logo após OAuth o state `token` ainda não atualizou). */
+  const runPushBackupWithToken = async (accessToken: string) => {
+    const id = getEffectiveDriveRootFolderId(getDb())
+    if (!isLikelyDriveFolderId(id)) {
+      appendLog('Salve o ID da pasta raiz no banco ou defina VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID no build.')
+      return
+    }
+    setBusy(true)
+    try {
+      await persistNow()
+      const data = getDb().export()
+      const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
+      const res = await uploadSqliteBackupToDrive({
+        token: accessToken,
+        rootFolderId: id,
+        data: bytes,
+      })
+      appendLog(
+        res.created
+          ? `Backup "${SQLITE_DRIVE_BACKUP_NAME}" criado no Drive (id ${res.fileId.slice(0, 8)}…).`
+          : `Backup "${SQLITE_DRIVE_BACKUP_NAME}" atualizado no Drive.`,
+      )
+    } catch (e) {
+      appendLog(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Formulário vazio + nada salvo no SQLite (só env do deploy): após OAuth baixa `my-finance.sqlite`
+   * do Drive e restaura (igual «Puxar backup»), sem dialog — é o fluxo “abri o app e quero meus dados”.
+   */
+  const maybeRestoreFromDriveAfterConnect = async (accessToken: string) => {
+    if (clientId.trim() || rootId.trim()) return
+    const db = getDb()
+    if (getDriveOauthClientId(db).trim() || getDriveRootFolderId(db).trim()) return
+    const id = getEffectiveDriveRootFolderId(db)
+    if (!isLikelyDriveFolderId(id)) return
+    await delay(AFTER_OAUTH_DELAY_MS)
+    appendLog('Baixando backup do Drive…')
+    setBusy(true)
+    try {
+      const { bytes } = await downloadSqliteBackupBytes(accessToken, id)
+      const file = new File([new Uint8Array(bytes)], SQLITE_DRIVE_BACKUP_NAME, {
+        type: 'application/x-sqlite3',
+      })
+      await replaceDatabaseFromFile(file)
+      appendLog('Backup do Drive aplicado. Recarregando…')
+      setTimeout(() => window.location.reload(), 400)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg.includes('Não há') && msg.includes(SQLITE_DRIVE_BACKUP_NAME)) {
+        appendLog(
+          `Não há backup no Drive nesta pasta ainda. Use «Enviar / atualizar backup» quando tiver dados neste navegador.`,
+        )
+      } else {
+        appendLog(msg)
+      }
+      setBusy(false)
+    }
+  }
+
   const connectGoogle = async (opts?: { fromEasterEgg?: boolean }) => {
     if (opts?.fromEasterEgg) {
       const trimmed = getEffectiveDriveOauthClientId(getDb()).trim()
@@ -89,36 +159,46 @@ export function SyncPage() {
         const res = await requestDriveAccessToken(trimmed, true)
         saveDriveSessionToken(trimmed, res.accessToken, res.expiresInSec)
         setToken(res.accessToken)
+        const db = getDb()
+        const noLocal =
+          !getDriveOauthClientId(db).trim() && !getDriveRootFolderId(db).trim()
+        const folderOk = isLikelyDriveFolderId(getEffectiveDriveRootFolderId(db))
         appendLog(
-          'Google conectado. Preencha os campos e salve a pasta raiz para sincronizar ou use o backup no Drive.',
+          noLocal && folderOk
+            ? 'Google conectado.'
+            : 'Google conectado. Preencha os campos e salve a pasta raiz para sincronizar ou use o backup no Drive.',
         )
+        await maybeRestoreFromDriveAfterConnect(res.accessToken)
       } catch (e) {
         appendLog(e instanceof Error ? e.message : 'Falha ao conectar Google')
       }
       return
     }
 
-    const trimmed = clientId.trim()
+    const fromForm = clientId.trim()
+    const trimmed = fromForm || getEffectiveDriveOauthClientId(getDb()).trim()
     if (!trimmed) {
-      appendLog('Preencha o OAuth Client ID no campo acima.')
+      appendLog('Sem Client ID disponível (configure no campo acima ou no deploy).')
       return
     }
     if (!isLikelyGoogleOauthClientId(trimmed)) {
       appendLog('O Client ID deve terminar em ".apps.googleusercontent.com". Confira o valor colado.')
       return
     }
-    const rootEff = extractDriveFolderId(rootId)
-    if (!isLikelyDriveFolderId(rootEff)) {
-      appendLog('Preencha a pasta raiz no campo acima (link ou ID).')
-      return
-    }
     try {
       const res = await requestDriveAccessToken(trimmed, true)
       saveDriveSessionToken(trimmed, res.accessToken, res.expiresInSec)
       setToken(res.accessToken)
+      const db = getDb()
+      const noLocal =
+        !getDriveOauthClientId(db).trim() && !getDriveRootFolderId(db).trim()
+      const folderOk = isLikelyDriveFolderId(getEffectiveDriveRootFolderId(db))
       appendLog(
-        'Google conectado. O token fica nesta aba até expirar ou você desconectar; pode mudar de página à vontade.',
+        noLocal && folderOk
+          ? 'Google conectado.'
+          : 'Google conectado. O token fica nesta aba até expirar ou você desconectar; pode mudar de página à vontade.',
       )
+      await maybeRestoreFromDriveAfterConnect(res.accessToken)
     } catch (e) {
       appendLog(e instanceof Error ? e.message : 'Falha ao conectar Google')
     }
@@ -221,31 +301,7 @@ export function SyncPage() {
       appendLog('Conecte o Google antes (botão "Conectar Google").')
       return
     }
-    const id = getEffectiveDriveRootFolderId(getDb())
-    if (!isLikelyDriveFolderId(id)) {
-      appendLog('Salve o ID da pasta raiz no banco ou defina VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID no build.')
-      return
-    }
-    setBusy(true)
-    try {
-      await persistNow()
-      const data = getDb().export()
-      const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
-      const res = await uploadSqliteBackupToDrive({
-        token,
-        rootFolderId: id,
-        data: bytes,
-      })
-      appendLog(
-        res.created
-          ? `Backup "${SQLITE_DRIVE_BACKUP_NAME}" criado no Drive (id ${res.fileId.slice(0, 8)}…).`
-          : `Backup "${SQLITE_DRIVE_BACKUP_NAME}" atualizado no Drive.`,
-      )
-    } catch (e) {
-      appendLog(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
+    await runPushBackupWithToken(token)
   }
 
   const pullBackupFromDrive = async () => {
@@ -472,11 +528,11 @@ export function SyncPage() {
           </button>
           <button
             type="button"
-            disabled={busy || !formConnectReady}
+            disabled={busy || !!token}
             title={
-              formConnectReady
-                ? 'Obter token OAuth do Google'
-                : 'Preencha os dois campos acima com valores válidos.'
+              token
+                ? 'Já há uma sessão Google ativa nesta aba. Use Desconectar para conectar de novo.'
+                : 'Obter token OAuth do Google'
             }
             onClick={() => void connectGoogle()}
             className="rounded-xl bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
@@ -539,11 +595,11 @@ export function SyncPage() {
             </button>
             <button
               type="button"
-              disabled={busy || !formConnectReady}
+              disabled={busy || !token}
               title={
-                formConnectReady
-                  ? 'Baixa o backup do Drive e substitui o banco local'
-                  : 'Preencha os dois campos acima com valores válidos.'
+                !token
+                  ? 'Conecte o Google antes.'
+                  : 'Baixa o backup do Drive e substitui o banco local.'
               }
               onClick={() => void pullBackupFromDrive()}
               className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-50"

@@ -5,6 +5,8 @@ export type FinanceDbContextValue = {
   ready: boolean
   error: string | null
   version: number
+  /** Só muda quando o arquivo SQLite inteiro é substituído (restaurar backup ou apagar tudo). Para remontar telas. */
+  dbEpoch: number
   getDb: () => Database
   touch: () => void
   persistSoon: () => void

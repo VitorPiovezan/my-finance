@@ -10,8 +10,10 @@ export function FinanceDbProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
+  const [dbEpoch, setDbEpoch] = useState(0)
 
   const touch = useCallback(() => setVersion((v) => v + 1), [])
+  const bumpDbEpoch = useCallback(() => setDbEpoch((e) => e + 1), [])
 
   const persistNow = useCallback(async () => {
     const db = dbRef.current
@@ -72,10 +74,11 @@ export function FinanceDbProvider({ children }: { children: ReactNode }) {
       dbRef.current?.close()
       const db = await createFinanceDatabase(buf)
       dbRef.current = db
+      bumpDbEpoch()
       touch()
       await idbSaveDb(db.export())
     },
-    [touch],
+    [touch, bumpDbEpoch],
   )
 
   const exportDatabaseFile = useCallback(() => {
@@ -99,14 +102,16 @@ export function FinanceDbProvider({ children }: { children: ReactNode }) {
     const db = await createFinanceDatabase(undefined)
     dbRef.current = db
     await idbSaveDb(db.export())
+    bumpDbEpoch()
     touch()
-  }, [touch])
+  }, [touch, bumpDbEpoch])
 
   const value = useMemo(
     () => ({
       ready,
       error,
       version,
+      dbEpoch,
       getDb,
       touch,
       persistSoon,
@@ -115,7 +120,7 @@ export function FinanceDbProvider({ children }: { children: ReactNode }) {
       exportDatabaseFile,
       clearAllLocalData,
     }),
-    [ready, error, version, getDb, touch, persistSoon, persistNow, replaceDatabaseFromFile, exportDatabaseFile, clearAllLocalData],
+    [ready, error, version, dbEpoch, getDb, touch, persistSoon, persistNow, replaceDatabaseFromFile, exportDatabaseFile, clearAllLocalData],
   )
 
   if (error) {
