@@ -9,6 +9,7 @@ import { CategorizePage } from './pages/CategorizePage'
 import { ConfigIaPage } from './pages/ConfigIaPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ImportacoesPage } from './pages/ImportacoesPage'
+import { InvestmentsPage } from './pages/InvestmentsPage'
 import { LancamentosPage } from './pages/LancamentosPage'
 import { SyncPage } from './pages/SyncPage'
 
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="categorizar" element={<CategorizePage />} />
         <Route path="por-categoria" element={<CategoriesAnalyticsPage />} />
         <Route path="agenda" element={<AgendaPage />} />
+        <Route path="investimentos" element={<InvestmentsPage />} />
         <Route path="sincronizar" element={<SyncPage />} />
         <Route path="importacoes" element={<ImportacoesPage />} />
         <Route path="config-ia" element={<ConfigIaPage />} />

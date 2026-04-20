@@ -79,7 +79,7 @@ export function getMonthPulse(db: Database, ym: string, today = new Date()): Mon
     JOIN accounts a ON a.id = t.account_id AND a.deleted_at IS NULL
     LEFT JOIN categories c ON c.id = t.category_id
     WHERE (${SQL_EFFECTIVE_SPEND_MONTH}) = ?
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     `,
     [ym],
   )
@@ -107,7 +107,7 @@ export function getMonthPulse(db: Database, ym: string, today = new Date()): Mon
       AND t.amount_cents < 0
       AND t.source != 'scheduled'
       AND CAST(strftime('%d', t.occurred_at) AS INTEGER) <= ?
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     `,
     [prevYm, daysElapsed],
   )
@@ -131,7 +131,7 @@ export function getMonthPulse(db: Database, ym: string, today = new Date()): Mon
     WHERE (${SQL_EFFECTIVE_SPEND_MONTH}) IN (${prevMonths.map(() => '?').join(',')})
       AND t.amount_cents < 0
       AND t.source != 'scheduled'
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     `,
     prevMonths as SqlValue[],
   )
@@ -195,7 +195,7 @@ export function compareCategoriesBetweenMonths(
     LEFT JOIN categories c ON c.id = t.category_id
     WHERE (${SQL_EFFECTIVE_SPEND_MONTH}) IN (?, ?)
       AND t.amount_cents < 0
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     GROUP BY t.category_id, ym
     `,
     [currentYm, previousYm],
@@ -283,7 +283,7 @@ export function getYearRecords(db: Database, year: number): YearRecords {
     WHERE (${SQL_EFFECTIVE_SPEND_MONTH}) LIKE ?
       AND t.amount_cents < 0
       AND t.source != 'scheduled'
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     ORDER BY t.amount_cents ASC
     LIMIT 1
     `,
@@ -299,7 +299,7 @@ export function getYearRecords(db: Database, year: number): YearRecords {
     LEFT JOIN categories c ON c.id = t.category_id
     WHERE (${SQL_EFFECTIVE_SPEND_MONTH}) LIKE ?
       AND t.amount_cents < 0
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     GROUP BY t.category_id
     ORDER BY cents DESC
     LIMIT 1
@@ -318,7 +318,7 @@ export function getYearRecords(db: Database, year: number): YearRecords {
     JOIN accounts a ON a.id = t.account_id AND a.deleted_at IS NULL
     LEFT JOIN categories c ON c.id = t.category_id
     WHERE (${SQL_EFFECTIVE_SPEND_MONTH}) LIKE ?
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     GROUP BY ym
     HAVING income > 0 OR expense > 0
     `,

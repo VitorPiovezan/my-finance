@@ -46,6 +46,26 @@ function yearMonths(year: number): string[] {
   return out
 }
 
+const MONTH_ABBR_PT = [
+  'jan',
+  'fev',
+  'mar',
+  'abr',
+  'mai',
+  'jun',
+  'jul',
+  'ago',
+  'set',
+  'out',
+  'nov',
+  'dez',
+]
+
+function monthAbbr(ym: string): string {
+  const m = Number(ym.slice(5, 7))
+  return MONTH_ABBR_PT[m - 1] ?? ym.slice(5, 7)
+}
+
 function keyForRow(row: CategorySpendRow): string {
   return row.categoryId ?? UNCAT_KEY
 }
@@ -759,6 +779,343 @@ export function CategoriesAnalyticsPage() {
           </p>
         </section>
       ) : null}
+
+      {mode === 'year' ? (
+        <CategoryLinesSection
+          rows={data.rows}
+          months={months}
+          onCategoryClick={(id) => toggle(id)}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function niceCeil(n: number): number {
+  if (n <= 0) return 1
+  const exp = Math.floor(Math.log10(n))
+  const base = 10 ** exp
+  const m = n / base
+  let nice: number
+  if (m <= 1) nice = 1
+  else if (m <= 2) nice = 2
+  else if (m <= 5) nice = 5
+  else nice = 10
+  return nice * base
+}
+
+function formatBRLCompact(cents: number): string {
+  const v = cents / 100
+  const abs = Math.abs(v)
+  if (abs >= 1000) {
+    return `R$ ${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}k`
+  }
+  return `R$ ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
+}
+
+function CategoryLinesSection({
+  rows,
+  months,
+  onCategoryClick,
+}: {
+  rows: CategorySpendRow[]
+  months: string[]
+  onCategoryClick: (categoryId: string | null) => void
+}) {
+  const rowsWithSpend = useMemo(() => rows.filter((r) => r.totalCents > 0), [rows])
+  const defaultActive = useMemo(
+    () =>
+      new Set<string>(
+        rowsWithSpend.slice(0, 6).map((r) => r.categoryId ?? UNCAT_KEY),
+      ),
+    [rowsWithSpend],
+  )
+  const [active, setActive] = useState<Set<string>>(defaultActive)
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+
+  // Resetar seleção quando o conjunto de rows muda (ex.: trocou o ano).
+  useEffect(() => {
+    setActive(defaultActive)
+  }, [defaultActive])
+
+  const toggleActive = (key: string) => {
+    setActive((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const visibleRows = useMemo(
+    () => rowsWithSpend.filter((r) => active.has(r.categoryId ?? UNCAT_KEY)),
+    [rowsWithSpend, active],
+  )
+
+  const rawMax = useMemo(() => {
+    let max = 0
+    for (const r of visibleRows) {
+      for (const ym of months) {
+        const v = r.byMonth[ym] ?? 0
+        if (v > max) max = v
+      }
+    }
+    return max
+  }, [visibleRows, months])
+
+  const niceMax = niceCeil(rawMax)
+  const tickCount = 5
+  const tickValues = Array.from({ length: tickCount + 1 }, (_, i) =>
+    Math.round((niceMax / tickCount) * i),
+  )
+
+  const width = 900
+  const height = 340
+  const padding = { top: 20, right: 24, bottom: 36, left: 72 }
+  const innerW = width - padding.left - padding.right
+  const innerH = height - padding.top - padding.bottom
+  const stepX = months.length > 1 ? innerW / (months.length - 1) : innerW
+
+  const xAt = (i: number) => padding.left + i * stepX
+  const yAt = (v: number) =>
+    padding.top + innerH - (niceMax > 0 ? (v / niceMax) * innerH : innerH)
+
+  return (
+    <section className="glass rounded-2xl p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h2 className="text-sm font-semibold text-zinc-100">
+          Variação mensal por categoria
+        </h2>
+        <span className="text-[11px] text-zinc-500">
+          Clique na legenda para mostrar/ocultar · clique no nome para ver lançamentos
+        </span>
+      </div>
+
+      {rowsWithSpend.length === 0 ? (
+        <p className="mt-4 text-sm text-zinc-500">Sem gastos neste período.</p>
+      ) : (
+        <>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setActive(
+                  new Set(rowsWithSpend.map((r) => r.categoryId ?? UNCAT_KEY)),
+                )
+              }
+              className="rounded-full border border-white/10 bg-surface-1 px-2.5 py-1 text-[11px] text-zinc-300 hover:text-white"
+            >
+              Todas
+            </button>
+            <button
+              type="button"
+              onClick={() => setActive(new Set())}
+              className="rounded-full border border-white/10 bg-surface-1 px-2.5 py-1 text-[11px] text-zinc-400 hover:text-zinc-200"
+            >
+              Limpar
+            </button>
+            <span className="mx-1 h-4 w-px bg-white/10" aria-hidden="true" />
+            {rowsWithSpend.map((r) => {
+              const key = r.categoryId ?? UNCAT_KEY
+              const isActive = active.has(key)
+              const color = colorForCategoryId(r.categoryId)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleActive(key)}
+                  onDoubleClick={() => onCategoryClick(r.categoryId)}
+                  title={`${r.categoryName} · ${formatBRL(r.totalCents)}${
+                    isActive ? '' : ' (oculto)'
+                  }`}
+                  className={[
+                    'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition',
+                    isActive
+                      ? 'border-white/15 bg-white/5 text-zinc-100'
+                      : 'border-white/5 bg-transparent text-zinc-500 hover:text-zinc-300',
+                  ].join(' ')}
+                >
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{
+                      backgroundColor: isActive ? color : 'rgba(255,255,255,0.2)',
+                    }}
+                  />
+                  <span className="max-w-[140px] truncate">{r.categoryName}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="mt-4">
+            <svg
+              viewBox={`0 0 ${width} ${height}`}
+              className="h-auto w-full"
+              preserveAspectRatio="none"
+              onMouseLeave={() => setHoverIdx(null)}
+            >
+              {tickValues.map((t, i) => {
+                const y = yAt(t)
+                return (
+                  <g key={`grid-${i}`}>
+                    <line
+                      x1={padding.left}
+                      x2={padding.left + innerW}
+                      y1={y}
+                      y2={y}
+                      stroke="rgba(255,255,255,0.06)"
+                      strokeDasharray={i === 0 ? undefined : '3 4'}
+                    />
+                    <text
+                      x={padding.left - 10}
+                      y={y}
+                      dy={3}
+                      textAnchor="end"
+                      fontSize="10"
+                      fill="rgba(161,161,170,0.85)"
+                    >
+                      {formatBRLCompact(t)}
+                    </text>
+                  </g>
+                )
+              })}
+
+              {months.map((ym, i) => {
+                const x = xAt(i)
+                const y = padding.top + innerH + 18
+                return (
+                  <text
+                    key={`xlbl-${ym}`}
+                    x={x}
+                    y={y}
+                    textAnchor="middle"
+                    fontSize="10"
+                    fill="rgba(161,161,170,0.85)"
+                  >
+                    {monthAbbr(ym).toUpperCase()}
+                  </text>
+                )
+              })}
+
+              {hoverIdx != null ? (
+                <line
+                  x1={xAt(hoverIdx)}
+                  x2={xAt(hoverIdx)}
+                  y1={padding.top}
+                  y2={padding.top + innerH}
+                  stroke="rgba(255,255,255,0.15)"
+                  strokeDasharray="3 3"
+                />
+              ) : null}
+
+              {visibleRows.map((r) => {
+                const color = colorForCategoryId(r.categoryId)
+                const values = months.map((ym) => r.byMonth[ym] ?? 0)
+                const points = values.map((v, i) => `${xAt(i)},${yAt(v)}`).join(' ')
+                return (
+                  <g key={`line-${r.categoryId ?? 'uncat'}`}>
+                    <polyline
+                      points={points}
+                      fill="none"
+                      stroke={color}
+                      strokeWidth={1.8}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      opacity={0.95}
+                    />
+                    {values.map((v, i) =>
+                      v > 0 ? (
+                        <circle
+                          key={`dot-${i}`}
+                          cx={xAt(i)}
+                          cy={yAt(v)}
+                          r={hoverIdx === i ? 3.4 : 2.4}
+                          fill={color}
+                        />
+                      ) : null,
+                    )}
+                  </g>
+                )
+              })}
+
+              {months.map((_, i) => (
+                <rect
+                  key={`hit-${i}`}
+                  x={xAt(i) - stepX / 2}
+                  y={padding.top}
+                  width={stepX}
+                  height={innerH}
+                  fill="transparent"
+                  onMouseEnter={() => setHoverIdx(i)}
+                />
+              ))}
+            </svg>
+
+            {hoverIdx != null ? (
+              <HoverSummary
+                ym={months[hoverIdx] ?? ''}
+                rows={visibleRows}
+              />
+            ) : (
+              <p className="mt-2 text-center text-[11px] text-zinc-500">
+                {visibleRows.length} categoria{visibleRows.length === 1 ? '' : 's'}{' '}
+                visíve{visibleRows.length === 1 ? 'l' : 'is'} ·{' '}
+                {rowsWithSpend.length - visibleRows.length > 0
+                  ? `${rowsWithSpend.length - visibleRows.length} ocultas`
+                  : 'todas com dados'}
+              </p>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
+function HoverSummary({
+  ym,
+  rows,
+}: {
+  ym: string
+  rows: CategorySpendRow[]
+}) {
+  const items = rows
+    .map((r) => ({
+      id: r.categoryId ?? UNCAT_KEY,
+      name: r.categoryName,
+      value: r.byMonth[ym] ?? 0,
+      color: colorForCategoryId(r.categoryId),
+    }))
+    .filter((x) => x.value > 0)
+    .sort((a, b) => b.value - a.value)
+
+  return (
+    <div className="mt-2 rounded-xl border border-white/5 bg-surface-1/60 px-3 py-2">
+      <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+        {formatYmLabel(ym)}
+      </p>
+      {items.length === 0 ? (
+        <p className="mt-1 text-xs text-zinc-500">Sem registros neste mês.</p>
+      ) : (
+        <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+          {items.map((it) => (
+            <li
+              key={it.id}
+              className="flex items-center gap-1.5 text-xs text-zinc-200"
+            >
+              <span
+                aria-hidden="true"
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: it.color }}
+              />
+              <span>{it.name}</span>
+              <span className="tabular-nums text-zinc-400">
+                {formatBRL(it.value)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

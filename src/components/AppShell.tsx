@@ -46,6 +46,7 @@ export function AppShell() {
     { to: '/lancamentos', label: 'Lançamentos' },
     { to: '/categorizar', label: 'Categorizar' },
     { to: '/agenda', label: 'Previsões', badge: overdueScheduledCount },
+    { to: '/investimentos', label: 'Investimentos' },
     { to: '/categorias', label: 'Categorias' },
     { to: '/contas', label: 'Contas' },
     { to: '/sincronizar', label: 'Sincronizar' },

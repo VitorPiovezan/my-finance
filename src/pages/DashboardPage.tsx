@@ -12,6 +12,7 @@ import {
   type MonthPulse,
   type YearRecords,
 } from '../lib/queries/dashboardHighlights'
+import { getInvestmentTotals, type InvestmentTotals } from '../lib/queries/investments'
 import { ymNow, ymPrevious } from '../lib/queries/spendSummary'
 
 function formatYmLabel(ym: string): string {
@@ -347,6 +348,75 @@ function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
   )
 }
 
+/**
+ * Card do dashboard com o saldo nominal guardado e os movimentos do mês
+ * (aportes e retiradas lado a lado). Não mostra rendimento — a gente só
+ * rastreia nominal por enquanto.
+ */
+function InvestmentsSummaryCard({ ym, totals }: { ym: string; totals: InvestmentTotals }) {
+  const {
+    balanceCents,
+    initialBalanceCents,
+    contributionsCents,
+    withdrawalsCents,
+    contributionsCount,
+    withdrawalsCount,
+  } = totals
+
+  return (
+    <Link
+      to="/investimentos"
+      className="glass group block rounded-2xl p-6 transition hover:border-white/20 hover:bg-white/[0.05]"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+            Saldo nominal
+          </p>
+          <p className="mt-1 text-3xl font-semibold tracking-tight text-emerald-100 tabular-nums">
+            {formatBRL(balanceCents)}
+          </p>
+          {initialBalanceCents > 0 ? (
+            <p className="mt-1 text-[11px] text-zinc-500">
+              Inclui {formatBRL(initialBalanceCents)} de saldo inicial pré-cadastrado.
+            </p>
+          ) : null}
+        </div>
+        <span className="text-[11px] text-zinc-500 group-hover:text-zinc-300">
+          Ver detalhes →
+        </span>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <StatColumn
+          label={`Aportes em ${formatShortMonthLabel(ym)}`}
+          value={formatBRL(contributionsCents)}
+          valueClassName="text-emerald-200"
+          hint={
+            contributionsCount > 0
+              ? `${contributionsCount} ${
+                  contributionsCount === 1 ? 'movimento' : 'movimentos'
+                } entraram pro investimento`
+              : 'Nenhum aporte neste mês ainda'
+          }
+        />
+        <StatColumn
+          label={`Retiradas em ${formatShortMonthLabel(ym)}`}
+          value={formatBRL(withdrawalsCents)}
+          valueClassName="text-amber-200"
+          hint={
+            withdrawalsCount > 0
+              ? `${withdrawalsCount} ${
+                  withdrawalsCount === 1 ? 'resgate' : 'resgates'
+                } saíram do investimento`
+              : 'Nenhuma retirada neste mês'
+          }
+        />
+      </div>
+    </Link>
+  )
+}
+
 function DeltaRow({ row, kind }: { row: CategoryDelta; kind: 'up' | 'down' }) {
   const color = colorForCategoryId(row.categoryId)
   const isUp = kind === 'up'
@@ -532,12 +602,13 @@ export function DashboardPage() {
   const prev = ymPrevious(cur)
   const year = Number(cur.slice(0, 4))
 
-  const { pulse, deltas, records } = useMemo(() => {
+  const { pulse, deltas, records, investments } = useMemo(() => {
     const db = getDb()
     return {
       pulse: getMonthPulse(db, cur),
       deltas: compareCategoriesBetweenMonths(db, cur, prev),
       records: getYearRecords(db, year),
+      investments: getInvestmentTotals(db, cur),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- version invalida leituras após mutações no SQLite
   }, [getDb, version, cur, prev, year])
@@ -582,6 +653,18 @@ export function DashboardPage() {
           >
             <MonthProjectionCard ym={cur} pulse={pulse} />
           </Section>
+
+          {investments.balanceCents > 0 ||
+          investments.contributionsCents > 0 ||
+          investments.withdrawalsCents > 0 ? (
+            <Section
+              title="Guardado em investimentos"
+              hint="Saldo nominal (sem rendimento)"
+              delay={0.08}
+            >
+              <InvestmentsSummaryCard ym={cur} totals={investments} />
+            </Section>
+          ) : null}
 
           <Section
             title="Destaques de variação"

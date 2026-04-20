@@ -11,6 +11,7 @@ import {
 } from '../lib/learning/descriptionIndex'
 import { formatBRL } from '../lib/money'
 import { SQL_EFFECTIVE_SPEND_MONTH } from '../lib/queries/effectiveSpendMonth'
+import { listInvestments, type Investment } from '../lib/queries/investments'
 import { ymNow } from '../lib/queries/spendSummary'
 
 function monthChoices(): { value: string; label: string }[] {
@@ -57,6 +58,11 @@ export function LancamentosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getDb, version])
 
+  const investments = useMemo<Investment[]>(() => {
+    return listInvestments(getDb(), false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getDb, version])
+
   const { rows, spendCents, incomeCents } = useMemo(() => {
     const db = getDb()
     const params: SqlValue[] = []
@@ -85,9 +91,11 @@ export function LancamentosPage() {
         t.amount_cents,
         t.source,
         t.category_id,
+        t.investment_id,
         a.name AS account_name,
         a.kind AS account_kind,
-        c.name AS category_name
+        c.name AS category_name,
+        c.kind AS category_kind
       FROM transactions t
       JOIN accounts a ON a.id = t.account_id
       LEFT JOIN categories c ON c.id = t.category_id
@@ -109,7 +117,27 @@ export function LancamentosPage() {
 
   const onCategoryChange = (txId: string, value: string) => {
     const db = getDb()
-    run(db, 'UPDATE transactions SET category_id = ? WHERE id = ?', [value || null, txId])
+    // Ao mudar pra uma categoria que não é investimento, limpa o vínculo
+    // pra não deixar `investment_id` órfão apontando pra categoria atual.
+    const chosen = categories.find((c) => String(c.id) === value)
+    const chosenKind = chosen ? String(chosen.kind) : ''
+    const keepsInvestment =
+      chosenKind === 'investment_in' || chosenKind === 'investment_out'
+    if (keepsInvestment) {
+      run(db, 'UPDATE transactions SET category_id = ? WHERE id = ?', [value || null, txId])
+    } else {
+      run(db, 'UPDATE transactions SET category_id = ?, investment_id = NULL WHERE id = ?', [
+        value || null,
+        txId,
+      ])
+    }
+    touch()
+    persistSoon()
+  }
+
+  const onInvestmentChange = (txId: string, value: string) => {
+    const db = getDb()
+    run(db, 'UPDATE transactions SET investment_id = ? WHERE id = ?', [value || null, txId])
     touch()
     persistSoon()
   }
@@ -328,10 +356,12 @@ export function LancamentosPage() {
                         row={r}
                         index={i}
                         categories={categories}
+                        investments={investments}
                         billingOpts={billingOpts}
                         suggestionIndex={suggestionIndex}
                         onCategoryChange={onCategoryChange}
                         onBillingRefChange={onBillingRefChange}
+                        onInvestmentChange={onInvestmentChange}
                       />
                     )),
                   ]
@@ -343,10 +373,12 @@ export function LancamentosPage() {
                     row={r}
                     index={i}
                     categories={categories}
+                    investments={investments}
                     billingOpts={billingOpts}
                     suggestionIndex={suggestionIndex}
                     onCategoryChange={onCategoryChange}
                     onBillingRefChange={onBillingRefChange}
+                    onInvestmentChange={onInvestmentChange}
                   />
                 ))
               )}
@@ -365,25 +397,32 @@ type LancamentoRowProps = {
   row: Record<string, SqlValue>
   index: number
   categories: Record<string, SqlValue>[]
+  investments: Investment[]
   billingOpts: { value: string; label: string }[]
   suggestionIndex: DescriptionIndex
   onCategoryChange: (txId: string, value: string) => void
   onBillingRefChange: (txId: string, value: string) => void
+  onInvestmentChange: (txId: string, value: string) => void
 }
 
 function LancamentoRow({
   row: r,
   index: i,
   categories,
+  investments,
   billingOpts,
   suggestionIndex,
   onCategoryChange,
   onBillingRefChange,
+  onInvestmentChange,
 }: LancamentoRowProps) {
   const amt = Number(r.amount_cents)
   const neg = amt < 0
   const rowColor = colorForCategoryId(r.category_id ? String(r.category_id) : null)
   const isUncat = !r.category_id
+  const categoryKind = r.category_kind ? String(r.category_kind) : ''
+  const isInvestment =
+    categoryKind === 'investment_in' || categoryKind === 'investment_out'
   const suggestion = isUncat
     ? suggestCategory(suggestionIndex, String(r.description ?? ''))
     : null
@@ -488,6 +527,29 @@ function LancamentoRow({
                 )}
               </span>
             </button>
+          ) : null}
+          {isInvestment ? (
+            <select
+              value={r.investment_id ? String(r.investment_id) : ''}
+              onChange={(e) => onInvestmentChange(String(r.id), e.target.value)}
+              title={
+                categoryKind === 'investment_in'
+                  ? 'Vincular aporte a um investimento (opcional).'
+                  : 'Vincular retirada a um investimento (opcional).'
+              }
+              className="w-full max-w-[240px] rounded-md border border-emerald-500/20 bg-emerald-400/5 px-2 py-1 text-[11px] text-emerald-100 outline-none ring-emerald-400/30 focus:ring-1"
+            >
+              <option value="">
+                {categoryKind === 'investment_in'
+                  ? 'Sem vínculo — aporte geral'
+                  : 'Sem vínculo — retirada geral'}
+              </option>
+              {investments.map((inv) => (
+                <option key={inv.id} value={inv.id}>
+                  {inv.name}
+                </option>
+              ))}
+            </select>
           ) : null}
         </div>
       </td>

@@ -25,6 +25,7 @@ import {
   type TopTransaction,
 } from '../lib/queries/analysis'
 import { SQL_EFFECTIVE_SPEND_MONTH } from '../lib/queries/effectiveSpendMonth'
+import { listInvestments, type Investment } from '../lib/queries/investments'
 import { ymNow } from '../lib/queries/spendSummary'
 
 const STORAGE_KEY = 'categorize-page-filters'
@@ -42,10 +43,12 @@ type TxRow = {
   description: string
   amount_cents: number
   category_id: string | null
+  category_kind: string | null
   category_name: string | null
   account_name: string
   account_kind: string
   source: string
+  investment_id: string | null
 }
 
 function monthChoices(): { value: string; label: string }[] {
@@ -264,6 +267,12 @@ export function CategorizePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- version invalida leituras após mutações no SQLite
   }, [getDb, version])
 
+  const investments = useMemo<Investment[]>(
+    () => listInvestments(getDb(), false),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- version invalida leituras após mutações no SQLite
+    [getDb, version],
+  )
+
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -341,9 +350,10 @@ export function CategorizePage() {
     const sql = `
       SELECT
         t.id, t.occurred_at, t.description, t.amount_cents,
-        t.category_id, t.source,
+        t.category_id, t.investment_id, t.source,
         a.name AS account_name, a.kind AS account_kind,
-        c.name AS category_name
+        c.name AS category_name,
+        c.kind AS category_kind
       FROM transactions t
       JOIN accounts a ON a.id = t.account_id
       LEFT JOIN categories c ON c.id = t.category_id
@@ -360,10 +370,12 @@ export function CategorizePage() {
       description: String(r.description ?? ''),
       amount_cents: Number(r.amount_cents ?? 0),
       category_id: r.category_id ? String(r.category_id) : null,
+      category_kind: r.category_kind ? String(r.category_kind) : null,
       category_name: r.category_name ? String(r.category_name) : null,
       account_name: String(r.account_name ?? ''),
       account_kind: String(r.account_kind ?? ''),
       source: String(r.source ?? ''),
+      investment_id: r.investment_id ? String(r.investment_id) : null,
     }))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- version invalida leituras após mutações no SQLite
   }, [getDb, version, accountId, scopeShortcut, ym])
@@ -378,7 +390,26 @@ export function CategorizePage() {
 
   const onCategoryChange = (txId: string, value: string) => {
     const db = getDb()
-    run(db, 'UPDATE transactions SET category_id = ? WHERE id = ?', [value || null, txId])
+    const chosen = categories.find((c) => c.id === value)
+    const chosenKind = chosen?.kind ?? ''
+    const keepsInvestment =
+      chosenKind === 'investment_in' || chosenKind === 'investment_out'
+    if (keepsInvestment) {
+      run(db, 'UPDATE transactions SET category_id = ? WHERE id = ?', [value || null, txId])
+    } else {
+      run(
+        db,
+        'UPDATE transactions SET category_id = ?, investment_id = NULL WHERE id = ?',
+        [value || null, txId],
+      )
+    }
+    touch()
+    persistSoon()
+  }
+
+  const onInvestmentChange = (txId: string, value: string) => {
+    const db = getDb()
+    run(db, 'UPDATE transactions SET investment_id = ? WHERE id = ?', [value || null, txId])
     touch()
     persistSoon()
   }
@@ -632,8 +663,10 @@ export function CategorizePage() {
                       row={r}
                       index={i}
                       categories={categories}
+                      investments={investments}
                       suggestionIndex={suggestionIndex}
                       onCategoryChange={onCategoryChange}
+                      onInvestmentChange={onInvestmentChange}
                     />
                   ))}
                 </tbody>
@@ -653,18 +686,24 @@ function CategorizeRow({
   row: r,
   index: i,
   categories,
+  investments,
   suggestionIndex,
   onCategoryChange,
+  onInvestmentChange,
 }: {
   row: TxRow
   index: number
   categories: { id: string; name: string; kind: string }[]
+  investments: Investment[]
   suggestionIndex: DescriptionIndex
   onCategoryChange: (txId: string, value: string) => void
+  onInvestmentChange: (txId: string, value: string) => void
 }) {
   const neg = r.amount_cents < 0
   const rowColor = colorForCategoryId(r.category_id)
   const isUncat = !r.category_id
+  const isInvestment =
+    r.category_kind === 'investment_in' || r.category_kind === 'investment_out'
   const suggestion = isUncat ? suggestCategory(suggestionIndex, r.description) : null
   const suggestionColor = suggestion
     ? colorForCategoryId(suggestion.suggestion.categoryId)
@@ -747,6 +786,29 @@ function CategorizeRow({
                 )}
               </span>
             </button>
+          ) : null}
+          {isInvestment ? (
+            <select
+              value={r.investment_id ?? ''}
+              onChange={(e) => onInvestmentChange(r.id, e.target.value)}
+              title={
+                r.category_kind === 'investment_in'
+                  ? 'Vincular aporte a um investimento (opcional).'
+                  : 'Vincular retirada a um investimento (opcional).'
+              }
+              className="w-full max-w-[240px] rounded-md border border-emerald-500/20 bg-emerald-400/5 px-2 py-1 text-[11px] text-emerald-100 outline-none ring-emerald-400/30 focus:ring-1"
+            >
+              <option value="">
+                {r.category_kind === 'investment_in'
+                  ? 'Sem vínculo — aporte geral'
+                  : 'Sem vínculo — retirada geral'}
+              </option>
+              {investments.map((inv) => (
+                <option key={inv.id} value={inv.id}>
+                  {inv.name}
+                </option>
+              ))}
+            </select>
           ) : null}
         </div>
       </td>

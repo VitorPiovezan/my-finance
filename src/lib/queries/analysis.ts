@@ -111,7 +111,7 @@ export function getOutflowByCategory(
     WHERE ${w.sql}
       AND (${SQL_EFFECTIVE_SPEND_MONTH}) = ?
       AND t.amount_cents < 0
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     GROUP BY t.category_id
     ORDER BY cents DESC
     `,
@@ -147,7 +147,7 @@ export function getInflowByCategory(
     WHERE ${w.sql}
       AND (${SQL_EFFECTIVE_SPEND_MONTH}) = ?
       AND t.amount_cents > 0
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     GROUP BY t.category_id
     ORDER BY cents DESC
     `,
@@ -199,7 +199,7 @@ export function getTransactionsByCategory(
     WHERE ${w.sql}
       AND (${SQL_EFFECTIVE_SPEND_MONTH}) = ?
       AND ${catCond}
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
       ${dirCond}
     ORDER BY ${order}, t.id DESC
     LIMIT ?
@@ -244,7 +244,7 @@ export function getTopTransactions(
     WHERE ${w.sql}
       AND (${SQL_EFFECTIVE_SPEND_MONTH}) = ?
       AND ${dirCond}
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     ORDER BY ${order}, t.id DESC
     LIMIT ?
     `,

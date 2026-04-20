@@ -44,20 +44,9 @@ Este repo traz um workflow em `.github/workflows/deploy.yml` que:
 Depois do primeiro push, abra **Settings → Pages** e em "Source" escolha
 **GitHub Actions**. Pronto — o workflow cuida do resto.
 
-### Secrets suportados (Settings → Secrets and variables → Actions)
-
-Só um secret entra no bundle público: o PIN do gate, em texto puro. Todas
-as outras credenciais (chave do Gemini, OAuth Client ID, Drive folder) são
-cadastradas pelo próprio usuário dentro do app e ficam no SQLite local do
-navegador — nunca vazam no JS servido pelo Pages.
-
-| Nome                  | Obrigatório | Descrição |
-|-----------------------|-------------|-----------|
-| `VITE_APP_ACCESS_PIN` | recomendado | PIN de acesso em texto puro. Sem isto o site abre sem PIN. É visível no bundle público — trate como obstáculo leve, não como segurança forte. |
-
 ### Credenciais configuradas pelo app (não vão pro repositório)
 
-Abra o app depois do deploy, digite o PIN e cadastre no próprio banco local:
+Abra o app depois do deploy e cadastre no próprio banco local:
 
 | Onde cadastrar        | O quê                                                        |
 |-----------------------|--------------------------------------------------------------|
@@ -67,15 +56,6 @@ Abra o app depois do deploy, digite o PIN e cadastre no próprio banco local:
 Esses valores ficam gravados na tabela `meta` do SQLite local e acompanham
 o backup `.sqlite`. Importando o backup em outro navegador, as credenciais
 vêm junto — é só não compartilhar o arquivo.
-
-### Sobre o PIN
-
-O valor de `VITE_APP_ACCESS_PIN` vai direto pro bundle JS público. Qualquer
-pessoa com DevTools consegue lê-lo. Use o PIN como *gate* simples pra evitar
-acesso casual, não como mecanismo de segurança sério.
-
-A sessão é guardada no `sessionStorage` e dura enquanto a aba/janela fica
-aberta — fechar o navegador obriga a digitar o PIN de novo.
 
 ## Segurança local
 

@@ -111,7 +111,7 @@ export function getYearCategoryMatrix(db: Database, year: number): CategorySpend
     LEFT JOIN categories c ON c.id = t.category_id
     WHERE (${SQL_EFFECTIVE_SPEND_MONTH}) LIKE ?
       AND t.amount_cents < 0
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     GROUP BY t.category_id, ym
     `,
     [prefix],
@@ -162,7 +162,7 @@ export function getMonthCategorySpend(db: Database, ym: string): CategorySpendRo
     LEFT JOIN categories c ON c.id = t.category_id
     WHERE (${SQL_EFFECTIVE_SPEND_MONTH}) = ?
       AND t.amount_cents < 0
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     GROUP BY t.category_id
     ORDER BY spend_cents DESC
     `,
@@ -210,7 +210,7 @@ export function getPeriodSummary(db: Database, periodPattern: string): PeriodSum
     LEFT JOIN categories c ON c.id = t.category_id
     WHERE ${whereFrag}
       AND t.amount_cents < 0
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     `,
     [param],
   )
@@ -224,7 +224,7 @@ export function getPeriodSummary(db: Database, periodPattern: string): PeriodSum
     LEFT JOIN categories c ON c.id = t.category_id
     WHERE ${whereFrag}
       AND t.amount_cents < 0
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     GROUP BY t.category_id
     ORDER BY cents DESC
     LIMIT 1
@@ -246,7 +246,7 @@ export function getPeriodSummary(db: Database, periodPattern: string): PeriodSum
     JOIN accounts a ON a.id = t.account_id AND a.deleted_at IS NULL
     LEFT JOIN categories c ON c.id = t.category_id
     WHERE ${whereFrag}
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     `,
     [param],
   )
@@ -310,7 +310,7 @@ export function getCategoryTransactionsInPeriod(
     WHERE ${periodWhere}
       AND ${catWhere}
       AND t.amount_cents < 0
-      AND (c.kind IS NULL OR c.kind != 'transfer')
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
     ORDER BY t.amount_cents ASC, t.occurred_at DESC, t.id DESC
     LIMIT ?
     `,
