@@ -11,7 +11,7 @@ O app usa **Firebase Authentication** (link por e-mail) para confirmar que quem 
 
 1. **Build** → Authentication → Começar.
 2. Aba **Sign-in method** → habilite **E-mail/senha** (na prática usamos **link por e-mail**; o provedor “E-mail” cobre o fluxo de link).
-3. Aba **Settings** → **Authorized domains**: inclua `127.0.0.1` (dev) e o host do GitHub Pages, por exemplo `vitorpiovezan.github.io`.
+3. Aba **Settings** → **Authorized domains**: inclua `127.0.0.1` (dev), o host do GitHub Pages (`vitorpiovezan.github.io`) e, se usar **domínio próprio**, também `vitorpiovezan.com.br`.
 
 ## 3. Firestore
 
@@ -35,15 +35,38 @@ Sem essas variáveis o app **não** ativa o gate de login; o comportamento antig
 
 ## 5. Link mágico (e-mail)
 
-O link enviado pelo Firebase deve abrir a **URL base** do site (a mesma que você colocar em `VITE` / GitHub Pages), por exemplo:
+O link enviado pelo Firebase deve abrir a **URL base** do app (a que aparece na barra do navegador ao abrir o My Finance), por exemplo:
 
-`https://vitorpiovezan.github.io/my-finance/`
+- GitHub Pages: `https://vitorpiovezan.github.io/my-finance/`
+- Domínio próprio (mesmo site, outro host): `https://vitorpiovezan.com.br/my-finance/`
 
-Em **Authentication → Templates de e-mail**, verifique se o domínio do link está entre os domínios autorizados.
+O app calcula essa base em tempo de execução (`window.location` + `BASE_URL` do Vite), então o build **não** precisa de variável extra para o domínio — basta o utilizador abrir o link no mesmo site em que fez o cadastro.
+
+Em **Authentication → Templates de e-mail**, verifique se o domínio do link está entre os **Authorized domains**.
 
 ## 6. OAuth do **Drive** (Google Cloud Console)
 
-Isso é **independente** do Firebase: cada usuário cria um **OAuth 2.0 Client ID (Web)** para a API do Drive e coloca nas telas do app as origens/redirects que o próprio site mostra (origem `https://<user>.github.io` e base `https://<user>.github.io/my-finance/`). Modo de teste do OAuth: adicione o e-mail em **Usuários de teste** e espere alguns minutos após salvar.
+Isso é **independente** do Firebase: cada utilizador cria um **OAuth 2.0 Client ID (Web)** para a API do Drive. Nas credenciais, inclua os mesmos valores que a página **Primeiro acesso** mostra para o ambiente onde corre o app, por exemplo:
+
+| Onde corre | Origem JavaScript autorizada | URI de redirecionamento (base do app) |
+|------------|------------------------------|--------------------------------------|
+| GitHub Pages | `https://vitorpiovezan.github.io` | `https://vitorpiovezan.github.io/my-finance/` |
+| Domínio próprio | `https://vitorpiovezan.com.br` | `https://vitorpiovezan.com.br/my-finance/` |
+
+Pode ter **as duas** linhas ao mesmo tempo no mesmo Client ID (útil para testar em `*.github.io` e em produção no domínio). Modo de teste do OAuth: adicione o e-mail em **Usuários de teste** e espere alguns minutos após gravar.
+
+## 6b. Domínio personalizado `vitorpiovezan.com.br` + GitHub Pages (checklist)
+
+O repositório já faz build com `VITE_BASE_PATH=/my-finance/` no workflow (ficheiro `.github/workflows/deploy.yml`). Não é preciso alterar o outro projeto na raiz do domínio só para o My Finance “existir” em `/my-finance/`.
+
+**No GitHub (repo `my-finance`):**
+
+1. **Settings → Pages** → **Build and deployment** → origem **GitHub Actions** (o workflow já está no repo).
+2. Depois de um deploy com sucesso, o site público fica em `https://vitorpiovezan.github.io/my-finance/`. Com domínio configurado na conta, o mesmo conteúdo costuma estar em `https://vitorpiovezan.com.br/my-finance/` (mesmo repositório de utilizador `username.github.io` + project site).
+
+**No Firebase** (secção 2): domínio autorizado `vitorpiovezan.com.br`.
+
+**No Google Cloud** (secção 6): origem `https://vitorpiovezan.com.br` e redirect `https://vitorpiovezan.com.br/my-finance/` (além dos de `github.io` se quiseres manter os dois).
 
 ## 7. Desenvolvimento local
 
