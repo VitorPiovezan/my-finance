@@ -68,6 +68,8 @@ O repositório já faz build com `VITE_BASE_PATH=/my-finance/` no workflow (fich
 
 **No Google Cloud** (secção 6): origem `https://vitorpiovezan.com.br` e redirect `https://vitorpiovezan.com.br/my-finance/` (além dos de `github.io` se quiseres manter os dois).
 
+**Deploy combinado (portfólio + My Finance no mesmo domínio):** o repositório [`portfolio`](https://github.com/VitorPiovezan/portfolio) tem um workflow que embute o build do `my-finance` em `/my-finance/`. Os secrets `VITE_FIREBASE_*` têm de existir **também** nas Actions do `portfolio`, não só no `my-finance`.
+
 ## 7. Desenvolvimento local
 
 - Opção A: preencha `VITE_FIREBASE_*` num `.env` local.
