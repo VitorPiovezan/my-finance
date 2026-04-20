@@ -2,6 +2,12 @@ import type { Database } from 'sql.js'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createFinanceDatabase } from '../lib/db/openDb'
 import { idbDeleteEntireDatabase, idbLoadDb, idbSaveDb } from '../lib/persist/idb'
+import {
+  getDriveOauthClientId,
+  getDriveRootFolderId,
+  setDriveOauthClientId,
+  setDriveRootFolderId,
+} from '../lib/settings/driveFolder'
 import { FinanceDbContext } from './financeDbContext'
 
 export function FinanceDbProvider({ children }: { children: ReactNode }) {
@@ -70,9 +76,15 @@ export function FinanceDbProvider({ children }: { children: ReactNode }) {
 
   const replaceDatabaseFromFile = useCallback(
     async (file: File) => {
+      const prev = dbRef.current
+      const preOauth = prev ? getDriveOauthClientId(prev).trim() : ''
+      const preRoot = prev ? getDriveRootFolderId(prev).trim() : ''
       const buf = await file.arrayBuffer()
-      dbRef.current?.close()
+      prev?.close()
       const db = await createFinanceDatabase(buf)
+      /** O backup do Drive é um snapshot antigo: pode não ter `drive.*` na meta. Mantém o que já estava no app. */
+      if (preOauth) setDriveOauthClientId(db, preOauth)
+      if (preRoot) setDriveRootFolderId(db, preRoot)
       dbRef.current = db
       bumpDbEpoch()
       touch()
