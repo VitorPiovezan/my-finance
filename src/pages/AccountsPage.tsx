@@ -3,6 +3,7 @@ import { type FormEvent, useMemo, useState } from 'react'
 import { useFinanceDb } from '../context/useFinanceDb'
 import { queryAll, run } from '../lib/db/query'
 import { newId } from '../lib/id'
+import { normalizeInstitutionKey } from '../lib/drive/driveApi'
 import { parseBRLToCents } from '../lib/money'
 
 const KINDS = [
@@ -40,10 +41,12 @@ export function AccountsPage() {
     const db = getDb()
     const id = newId()
     const now = new Date().toISOString()
+    const rawKey = institutionKey.trim()
+    const keyNorm = rawKey ? normalizeInstitutionKey(rawKey) : null
     run(db, 'INSERT INTO accounts (id, name, institution_key, kind, color, invoice_close_day, created_at) VALUES (?,?,?,?,?,?,?)', [
       id,
       name.trim(),
-      institutionKey.trim() || null,
+      keyNorm,
       kind,
       null,
       null,

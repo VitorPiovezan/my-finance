@@ -23,11 +23,14 @@ import {
   setDriveRootFolderId,
 } from '../lib/settings/driveFolder'
 import { parseBillingRefYm } from '../lib/import/billingMonth'
+import { ensureFolderPath, uploadNewCsvFileToFolder } from '../lib/drive/driveApi'
 import {
   SQLITE_DRIVE_BACKUP_NAME,
   downloadSqliteBackupBytes,
   uploadSqliteBackupToDrive,
 } from '../lib/drive/sqliteDriveBackup'
+import { extractPdfText } from '../lib/import/pdfText'
+import { pdfTextToNubankCsv, type PdfBankKey } from '../lib/import/pdfToCsv'
 import { ymNow } from '../lib/queries/spendSummary'
 import { syncDriveToDatabase } from '../lib/sync/driveSync'
 import type { Row } from '../lib/db/query'
@@ -64,6 +67,9 @@ export function SyncPage() {
   const [refMonthCartao, setRefMonthCartao] = useState(() => ymNow())
   const [refMonthConta, setRefMonthConta] = useState(() => ymNow())
   const [localStatementMonth, setLocalStatementMonth] = useState(() => ymNow())
+  const [pdfBank, setPdfBank] = useState<PdfBankKey>('mercado-pago')
+  const [pdfBucket, setPdfBucket] = useState<'cartao' | 'conta'>('cartao')
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
 
   const accounts = useMemo(() => {
     const db = getDb()
@@ -426,6 +432,52 @@ export function SyncPage() {
     }
   }
 
+  const uploadPdfStatementToDrive = async () => {
+    if (!token) {
+      appendLog('Conecte o Google antes.')
+      return
+    }
+    if (!pdfFile) {
+      appendLog('Escolha um arquivo PDF.')
+      return
+    }
+    if (pdfBucket === 'conta') {
+      appendLog('Conversão automática de PDF de conta ainda não está disponível. Escolha «cartão» ou exporte CSV pelo banco.')
+      return
+    }
+    flushDriveFormToMeta()
+    await persistNow()
+    const rootFolder = getEffectiveDriveRootFolderId(getDb())
+    if (!isLikelyDriveFolderId(rootFolder)) {
+      appendLog('Configure a pasta raiz do Drive (campo acima).')
+      return
+    }
+    setBusy(true)
+    try {
+      const text = await extractPdfText(pdfFile)
+      const csv = pdfTextToNubankCsv(pdfBank, pdfBucket, text)
+      const bucketFolder = pdfBucket === 'cartao' ? 'cartao' : 'conta'
+      const targetId = await ensureFolderPath(token, rootFolder, [pdfBank, bucketFolder])
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+      const base = pdfFile.name.replace(/\.pdf$/i, '').replace(/[^\w-]+/g, '_').slice(0, 48)
+      const fileName = `${base || 'fatura'}-${stamp}.csv`
+      await uploadNewCsvFileToFolder({
+        token,
+        parentFolderId: targetId,
+        fileName,
+        csvText: csv,
+      })
+      appendLog(
+        `CSV salvo no Drive em ${pdfBank}/${bucketFolder}/${fileName}. Use «Sincronizar agora» para importar no app.`,
+      )
+      setPdfFile(null)
+    } catch (e) {
+      appendLog(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const seedManualTx = (accountId: string) => {
     if (!accountId) return
     const db = getDb()
@@ -632,6 +684,74 @@ export function SyncPage() {
               className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? 'Trabalhando…' : 'Puxar backup do Drive e restaurar'}
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-3 border-t border-white/10 pt-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+            PDF de fatura → CSV no Drive
+          </h3>
+          <p className="text-sm text-zinc-400">
+            Envie o PDF da <strong className="text-zinc-300">fatura de cartão</strong> (Mercado Pago ou Santander). O app
+            gera um CSV no mesmo formato do Nubank e grava em{' '}
+            <span className="font-mono text-zinc-300">…/mercado-pago/cartao/</span> ou{' '}
+            <span className="font-mono text-zinc-300">…/santander/cartao/</span> na pasta raiz. Depois use{' '}
+            <strong className="text-zinc-300">Sincronizar agora</strong> para importar.
+          </p>
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">Banco</label>
+              <select
+                value={pdfBank}
+                onChange={(e) => setPdfBank(e.target.value as PdfBankKey)}
+                disabled={busy}
+                className="mt-2 block rounded-xl border border-white/10 bg-surface-1 px-3 py-2 text-sm text-white outline-none disabled:opacity-50"
+              >
+                <option value="mercado-pago">Mercado Pago</option>
+                <option value="santander">Santander</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">Tipo</label>
+              <select
+                value={pdfBucket}
+                onChange={(e) => setPdfBucket(e.target.value as 'cartao' | 'conta')}
+                disabled={busy}
+                className="mt-2 block rounded-xl border border-white/10 bg-surface-1 px-3 py-2 text-sm text-white outline-none disabled:opacity-50"
+              >
+                <option value="cartao">Cartão (fatura)</option>
+                <option value="conta" disabled>
+                  Conta (em breve)
+                </option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">PDF</label>
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                disabled={busy || !token}
+                className="mt-2 block w-full max-w-xs text-sm text-zinc-400 file:mr-2 file:rounded-lg file:border-0 file:bg-surface-2 file:px-3 file:py-1.5 file:text-zinc-200"
+                onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+            <button
+              type="button"
+              disabled={busy || !token || !pdfFile || pdfBucket !== 'cartao'}
+              title={
+                !token
+                  ? 'Conecte o Google antes.'
+                  : !pdfFile
+                    ? 'Escolha um PDF.'
+                    : pdfBucket !== 'cartao'
+                      ? 'Por enquanto só fatura de cartão.'
+                      : 'Gerar CSV e enviar à subpasta do Drive'
+              }
+              onClick={() => void uploadPdfStatementToDrive()}
+              className="rounded-xl border border-violet-500/40 bg-violet-500/15 px-4 py-2 text-sm font-medium text-violet-100 hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy ? 'Processando…' : 'Converter e enviar CSV ao Drive'}
             </button>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import type { Database } from 'sql.js'
 import type { Row } from '../db/query'
+import { getAccountInstitutionKey, registeredNormalizedInstitutionKeys } from '../db/accountInstitutionKey'
 import { accountMatchesBucket, parseBucketFolderName, type AccountBucket } from '../drive/folderBuckets'
 import { downloadFileText, listFolderChildren, normalizeInstitutionKey } from '../drive/driveApi'
 import { applyCsvImport } from '../import/applyCsv'
@@ -58,7 +59,7 @@ function findAccountForBucket(
   bucket: AccountBucket,
 ): Row | undefined {
   const matches = accounts.filter((a) =>
-    accountMatchesBucket(institutionKey, String(a.institution_key ?? ''), String(a.kind), bucket),
+    accountMatchesBucket(institutionKey, getAccountInstitutionKey(a), String(a.kind), bucket),
   )
   if (matches.length === 0) return undefined
   if (bucket === 'checking') {
@@ -96,9 +97,13 @@ export async function syncDriveToDatabase(params: {
 
   for (const folder of folders) {
     const institutionKey = normalizeInstitutionKey(folder.name)
-    const matchingByInst = accounts.filter((a) => institutionMatch(String(a.institution_key ?? ''), folder.name))
+    const matchingByInst = accounts.filter((a) => institutionMatch(getAccountInstitutionKey(a), folder.name))
     if (matchingByInst.length === 0) {
-      onLog(`Pasta "${folder.name}" ignorada: nenhuma conta com chave "${institutionKey}".`)
+      const hint = registeredNormalizedInstitutionKeys(accounts)
+      onLog(
+        `Pasta "${folder.name}" ignorada: nenhuma conta com chave "${institutionKey}".` +
+          (hint.length > 0 ? ` Chaves cadastradas (normalizadas): ${hint.join(', ')}.` : ''),
+      )
       continue
     }
 
