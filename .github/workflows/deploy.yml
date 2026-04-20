@@ -33,12 +33,13 @@ jobs:
         env:
           # Sub-path do Pages: https://<user>.github.io/my-finance/
           VITE_BASE_PATH: /my-finance/
-          # PIN do gate (texto puro no bundle).
-          VITE_APP_ACCESS_PIN: ${{ secrets.VITE_APP_ACCESS_PIN }}
-          # Opcionais: padrão do deploy; o SQLite local sobrescreve se o usuário salvar na UI.
-          # Ainda assim entram no JS público — não são segredo.
-          VITE_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GOOGLE_OAUTH_CLIENT_ID }}
-          VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID: ${{ secrets.VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID }}
+          # Firebase (login por e-mail + Firestore). Opcional: sem secrets o gate de login fica desligado.
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
         run: npm run build
 
       - name: Upload Pages artifact

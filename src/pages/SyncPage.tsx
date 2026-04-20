@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useFinanceDb } from '../context/useFinanceDb'
 import { queryAll, run } from '../lib/db/query'
 import {
@@ -15,7 +15,7 @@ import {
   extractDriveFolderId,
   getDriveOauthClientId,
   getDriveRootFolderId,
-  getEffectiveDriveOauthClientId,
+  getEffectiveDriveOauthClientIdPreferSession,
   getEffectiveDriveRootFolderId,
   isLikelyDriveFolderId,
   isLikelyGoogleOauthClientId,
@@ -24,17 +24,15 @@ import {
 } from '../lib/settings/driveFolder'
 import { parseBillingRefYm } from '../lib/import/billingMonth'
 import { ensureFolderPath, uploadNewCsvFileToFolder } from '../lib/drive/driveApi'
-import {
-  SQLITE_DRIVE_BACKUP_NAME,
-  downloadSqliteBackupBytes,
-  uploadSqliteBackupToDrive,
-} from '../lib/drive/sqliteDriveBackup'
+import { pushLocalSqliteBackupToDrive } from '../lib/drive/pushLocalSqliteBackup'
+import { SQLITE_DRIVE_BACKUP_NAME, downloadSqliteBackupBytes } from '../lib/drive/sqliteDriveBackup'
 import { extractPdfText } from '../lib/import/pdfText'
 import { pdfTextToNubankCsv, type PdfBankKey } from '../lib/import/pdfToCsv'
 import { ymNow } from '../lib/queries/spendSummary'
 import { syncDriveToDatabase } from '../lib/sync/driveSync'
 import type { Row } from '../lib/db/query'
 import { newId } from '../lib/id'
+import { clearDriveSessionAndAllLocalData } from '../lib/session/logoutDriveAndLocal'
 
 /** Após o fluxo OAuth (popup), um tick extra evita corrida com o fechamento da janela e com a sessão. */
 const AFTER_OAUTH_DELAY_MS = 350
@@ -52,12 +50,14 @@ export function SyncPage() {
     exportDatabaseFile,
     persistNow,
     replaceDatabaseFromFile,
+    clearAllLocalData,
   } = useFinanceDb()
+  const navigate = useNavigate()
   /** Efetivo (meta + env) para o campo não ficar vazio quando só existe VITE_* ou após restore. */
-  const [clientId, setClientId] = useState<string>(() => getEffectiveDriveOauthClientId(getDb()))
+  const [clientId, setClientId] = useState<string>(() => getEffectiveDriveOauthClientIdPreferSession(getDb()))
   const [rootId, setRootId] = useState<string>(() => getEffectiveDriveRootFolderId(getDb()))
   const [token, setToken] = useState<string | null>(() =>
-    loadDriveSessionToken(getEffectiveDriveOauthClientId(getDb())),
+    loadDriveSessionToken(getEffectiveDriveOauthClientIdPreferSession(getDb())),
   )
   const [busy, setBusy] = useState(false)
   const logTapCountRef = useRef(0)
@@ -110,28 +110,19 @@ export function SyncPage() {
 
   /** Upload com token explícito (logo após OAuth o state `token` ainda não atualizou). */
   const runPushBackupWithToken = async (accessToken: string) => {
-    const id = getEffectiveDriveRootFolderId(getDb())
-    if (!isLikelyDriveFolderId(id)) {
-      appendLog('Salve o ID da pasta raiz no banco ou defina VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID no build.')
-      return
-    }
     setBusy(true)
     try {
       await persistNow()
-      const data = getDb().export()
-      const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
-      const res = await uploadSqliteBackupToDrive({
-        token: accessToken,
-        rootFolderId: id,
-        data: bytes,
-      })
+      const r = await pushLocalSqliteBackupToDrive({ db: getDb(), token: accessToken })
+      if (!r.ok) {
+        appendLog(r.error)
+        return
+      }
       appendLog(
-        res.created
-          ? `Backup "${SQLITE_DRIVE_BACKUP_NAME}" criado no Drive (id ${res.fileId.slice(0, 8)}…).`
+        r.created
+          ? `Backup "${SQLITE_DRIVE_BACKUP_NAME}" criado no Drive (id ${r.fileId.slice(0, 8)}…).`
           : `Backup "${SQLITE_DRIVE_BACKUP_NAME}" atualizado no Drive.`,
       )
-    } catch (e) {
-      appendLog(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
@@ -173,7 +164,7 @@ export function SyncPage() {
 
   const connectGoogle = async (opts?: { fromEasterEgg?: boolean }) => {
     if (opts?.fromEasterEgg) {
-      const trimmed = getEffectiveDriveOauthClientId(getDb()).trim()
+      const trimmed = getEffectiveDriveOauthClientIdPreferSession(getDb()).trim()
       if (!trimmed) {
         appendLog('Sem Client ID disponível (configure no campo ou no deploy).')
         return
@@ -203,7 +194,7 @@ export function SyncPage() {
     }
 
     const fromForm = clientId.trim()
-    const trimmed = fromForm || getEffectiveDriveOauthClientId(getDb()).trim()
+    const trimmed = fromForm || getEffectiveDriveOauthClientIdPreferSession(getDb()).trim()
     if (!trimmed) {
       appendLog('Sem Client ID disponível (configure no campo acima ou no deploy).')
       return
@@ -244,9 +235,20 @@ export function SyncPage() {
   }
 
   const disconnectGoogle = () => {
-    clearDriveSessionToken()
-    setToken(null)
-    appendLog('Sessão Google desconectada nesta aba.')
+    const ok = window.confirm(
+      'Desconectar o Google e apagar os dados locais neste navegador?\n\n' +
+        'Contas, lançamentos e configurações salvas no aparelho serão removidos. ' +
+        'O backup no Google Drive não é apagado. Depois você será enviado à tela de entrar.',
+    )
+    if (!ok) return
+    void (async () => {
+      try {
+        await clearDriveSessionAndAllLocalData(clearAllLocalData)
+        navigate('/entrar', { replace: true })
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
+    })()
   }
 
   const persistClientId = () => {
@@ -301,7 +303,7 @@ export function SyncPage() {
     await persistNow()
     const id = getEffectiveDriveRootFolderId(getDb())
     if (!isLikelyDriveFolderId(id)) {
-      appendLog('ID da pasta inválido. Salve no banco ou defina VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID no build.')
+      appendLog('ID da pasta inválido. Salve o ID da pasta raiz na tela Sincronizar.')
       return
     }
     setBusy(true)
@@ -344,7 +346,7 @@ export function SyncPage() {
     await persistNow()
     const id = getEffectiveDriveRootFolderId(getDb())
     if (!isLikelyDriveFolderId(id)) {
-      appendLog('Salve o ID da pasta raiz no banco ou defina VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID no build.')
+      appendLog('Salve o ID da pasta raiz na tela Sincronizar.')
       return
     }
     const ok = window.confirm(
@@ -684,6 +686,35 @@ export function SyncPage() {
               className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? 'Trabalhando…' : 'Puxar backup do Drive e restaurar'}
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-3 pt-1">
+            <button
+              type="button"
+              disabled={busy}
+              title="Baixa uma cópia do .sqlite para o seu computador"
+              onClick={() => void persistNow().then(() => exportDatabaseFile())}
+              className="rounded-xl border border-white/10 bg-surface-2 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-white/10 disabled:opacity-50"
+            >
+              Exportar cópia .sqlite
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              title="Remove todos os dados deste navegador"
+              onClick={() => {
+                const ok = window.confirm(
+                  'Apagar TODOS os dados deste app neste navegador?\n\n' +
+                    'Contas, lançamentos, importações, agenda e categorias extras somem. As categorias padrão voltam. Não dá para desfazer.',
+                )
+                if (!ok) return
+                void clearAllLocalData().catch((e) =>
+                  window.alert(e instanceof Error ? e.message : String(e)),
+                )
+              }}
+              className="rounded-xl border border-danger/40 bg-danger/10 px-4 py-2 text-sm font-medium text-rose-200 hover:bg-danger/20 disabled:opacity-50"
+            >
+              Apagar dados locais e recomeçar
             </button>
           </div>
         </div>

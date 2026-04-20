@@ -1,13 +1,13 @@
 import type { Database } from 'sql.js'
+import { getStoredDriveSessionClientId } from '../drive/driveTokenSession'
 import { SETTING_KEYS, getSetting, setSetting } from './appSettings'
 
 /**
  * Configurações do Google Drive (folder raiz + OAuth Client ID).
  *
- * Ambas ficam na tabela `meta` do SQLite local pra nunca serem embutidas
- * no bundle público. O OAuth Client ID é "semi-público" por design do
- * Google, mas um atacante que capture o seu pode esgotar a quota associada
- * — então mantemos em local isolado por padrão.
+ * Ficam na tabela `meta` do SQLite local; o Client ID vem também do registo
+ * do utilizador (Firestore) durante o onboarding. O token OAuth na sessão
+ * guarda o Client ID usado em `saveDriveSessionToken` para não divergir.
  */
 
 /** Aceita só o ID ou a URL completa do Drive (cole o link da pasta). */
@@ -36,32 +36,24 @@ export function getDriveOauthClientId(db: Database): string {
   return getSetting(db, SETTING_KEYS.driveOauthClientId)
 }
 
-/** Client ID injetado no build (`VITE_GOOGLE_OAUTH_CLIENT_ID`). Visível no bundle. */
-export function getDriveOauthClientIdFromEnv(): string {
-  return (import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID ?? '').trim()
-}
-
-/** Pasta raiz injetada no build (`VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID`). Visível no bundle. */
-export function getDriveRootFolderIdFromEnv(): string {
-  return extractDriveFolderId((import.meta.env.VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID ?? '').trim())
+/** Client ID efetivo: valor salvo no SQLite. */
+export function getEffectiveDriveOauthClientId(db: Database): string {
+  return getDriveOauthClientId(db).trim()
 }
 
 /**
- * Client ID efetivo: valor salvo no SQLite tem prioridade; se vazio, usa o do build (secrets / .env).
+ * Igual ao efetivo, mas se o SQLite ainda não tiver meta e existir token na sessão da aba,
+ * usa o Client ID guardado com esse token (o mesmo usado em `saveDriveSessionToken`).
  */
-export function getEffectiveDriveOauthClientId(db: Database): string {
+export function getEffectiveDriveOauthClientIdPreferSession(db: Database): string {
   const fromDb = getDriveOauthClientId(db).trim()
   if (fromDb) return fromDb
-  return getDriveOauthClientIdFromEnv()
+  return getStoredDriveSessionClientId() ?? ''
 }
 
-/**
- * ID da pasta raiz efetivo: banco primeiro; se vazio, usa o do build.
- */
+/** ID da pasta raiz efetivo: apenas o valor salvo no SQLite. */
 export function getEffectiveDriveRootFolderId(db: Database): string {
-  const fromDb = getDriveRootFolderId(db).trim()
-  if (fromDb) return fromDb
-  return getDriveRootFolderIdFromEnv()
+  return getDriveRootFolderId(db).trim()
 }
 
 export function setDriveOauthClientId(db: Database, clientId: string): void {

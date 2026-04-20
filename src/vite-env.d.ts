@@ -1,12 +1,15 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_APP_ACCESS_PIN?: string
   readonly VITE_BASE_PATH?: string
-  /** OAuth Client ID padrão (deploy). Sobrescrito pelo valor salvo no SQLite. */
-  readonly VITE_GOOGLE_OAUTH_CLIENT_ID?: string
-  /** ID ou URL da pasta raiz no Drive (deploy). Sobrescrito pelo SQLite. */
-  readonly VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID?: string
+  /** `1` desliga o gate de login Google (útil sem Firebase em dev). */
+  readonly VITE_DISABLE_GOOGLE_GATE?: string
+  readonly VITE_FIREBASE_API_KEY?: string
+  readonly VITE_FIREBASE_AUTH_DOMAIN?: string
+  readonly VITE_FIREBASE_PROJECT_ID?: string
+  readonly VITE_FIREBASE_STORAGE_BUCKET?: string
+  readonly VITE_FIREBASE_MESSAGING_SENDER_ID?: string
+  readonly VITE_FIREBASE_APP_ID?: string
 }
 
 interface ImportMeta {

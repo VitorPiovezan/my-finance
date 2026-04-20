@@ -10,13 +10,23 @@ const KEY_CLIENT = 'mf_drive_token_client_id'
 /** Margem antes do vencimento real (evita 401 no limite). */
 const EXPIRY_SKEW_MS = 90_000
 
+/** Client ID guardado junto do último token (para alinhar com o SQLite quando o meta ainda não leu bem). */
+export function getStoredDriveSessionClientId(): string | null {
+  try {
+    const s = sessionStorage.getItem(KEY_CLIENT)?.trim()
+    return s && s.length > 0 ? s : null
+  } catch {
+    return null
+  }
+}
+
 export function saveDriveSessionToken(
   clientId: string,
   accessToken: string,
   expiresInSec?: number,
 ): void {
   try {
-    sessionStorage.setItem(KEY_CLIENT, clientId)
+    sessionStorage.setItem(KEY_CLIENT, clientId.trim())
     sessionStorage.setItem(KEY_TOKEN, accessToken)
     if (expiresInSec != null && Number.isFinite(expiresInSec) && expiresInSec > 0) {
       const at = Date.now() + expiresInSec * 1000 - EXPIRY_SKEW_MS
@@ -31,10 +41,11 @@ export function saveDriveSessionToken(
 
 /** Token ainda válido para este Client ID (o mesmo salvo no banco ao conectar). */
 export function loadDriveSessionToken(expectedClientId: string): string | null {
-  if (!expectedClientId.trim()) return null
+  const expected = expectedClientId.trim()
+  if (!expected) return null
   try {
-    const storedClient = sessionStorage.getItem(KEY_CLIENT)
-    if (storedClient !== expectedClientId) return null
+    const storedClient = sessionStorage.getItem(KEY_CLIENT)?.trim() ?? ''
+    if (storedClient !== expected) return null
     const exp = sessionStorage.getItem(KEY_EXPIRES_MS)
     if (exp != null && Date.now() > Number(exp)) {
       clearDriveSessionToken()
