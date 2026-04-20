@@ -4,7 +4,7 @@ import { Link, Navigate, useParams } from 'react-router-dom'
 import { AiCategorizeButton } from '../components/AiCategorizeButton'
 import { CATEGORY_PALETTE, DonutChart, type DonutSlice } from '../components/DonutChart'
 import { useFinanceDb } from '../context/useFinanceDb'
-import { formatBRL } from '../lib/money'
+import { useMaskedMoney } from '../context/AmountVisibilityContext'
 import {
   getAnalysisSummary,
   getInflowByCategory,
@@ -65,6 +65,7 @@ function CategoryLegend({
   expandedTransactions: TopTransaction[]
   expandedLoading?: boolean
 }) {
+  const { brl } = useMaskedMoney()
   if (items.length === 0) {
     return <p className="text-sm text-zinc-500">{emptyMessage}</p>
   }
@@ -102,7 +103,7 @@ function CategoryLegend({
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <p className="whitespace-nowrap font-semibold tabular-nums text-zinc-100">
-                  {formatBRL(it.cents)}
+                  {brl(it.cents)}
                 </p>
                 <span
                   aria-hidden="true"
@@ -145,7 +146,7 @@ function CategoryLegend({
                             <p
                               className={`shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums ${amountColor}`}
                             >
-                              {formatBRL(Math.abs(t.amountCents))}
+                              {brl(Math.abs(t.amountCents))}
                             </p>
                           </li>
                         ))}
@@ -173,6 +174,7 @@ function TopList({
   tone: 'out' | 'in'
   emptyMessage: string
 }) {
+  const { brl } = useMaskedMoney()
   const color = tone === 'out' ? 'text-rose-200' : 'text-emerald-200'
   return (
     <div className="glass rounded-2xl p-5">
@@ -193,7 +195,7 @@ function TopList({
                 </p>
               </div>
               <p className={`shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums ${color}`}>
-                {formatBRL(Math.abs(t.amountCents))}
+                {brl(Math.abs(t.amountCents))}
               </p>
             </li>
           ))}
@@ -226,6 +228,7 @@ function SummaryStat({
 }
 
 export function AnalysisPage() {
+  const { brl } = useMaskedMoney()
   const { scope: rawScope, ym: rawYm } = useParams<{ scope: string; ym: string }>()
   const { getDb, version } = useFinanceDb()
 
@@ -317,7 +320,7 @@ export function AnalysisPage() {
   const netTone: 'positive' | 'negative' | 'neutral' =
     data.summary.netCents > 0 ? 'positive' : data.summary.netCents < 0 ? 'negative' : 'neutral'
 
-  const prevOutflowLabel = formatBRL(data.prevSummary.outflowCents)
+  const prevOutflowLabel = brl(data.prevSummary.outflowCents)
 
   return (
     <div className="space-y-8">
@@ -344,7 +347,7 @@ export function AnalysisPage() {
             <span>
               <strong className="text-zinc-200">{data.summary.transferCount}</strong>{' '}
               {data.summary.transferCount === 1 ? 'transferência ignorada' : 'transferências ignoradas'} ·{' '}
-              <span className="tabular-nums">{formatBRL(data.summary.transferVolumeCents)}</span> movidos
+              <span className="tabular-nums">{brl(data.summary.transferVolumeCents)}</span> movidos
             </span>
             <Link to="/lancamentos" className="text-accent-2 hover:underline">
               ver lançamentos →
@@ -378,19 +381,19 @@ export function AnalysisPage() {
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryStat
           label={scope === 'cartao' ? 'Pagamentos ao cartão' : 'Entradas'}
-          value={formatBRL(inflowTotal)}
+          value={brl(inflowTotal)}
           tone={inflowTotal > 0 ? 'positive' : 'neutral'}
           hint={scope === 'cartao' ? 'Estornos e créditos no cartão' : 'Soma dos créditos no mês'}
         />
         <SummaryStat
           label={scope === 'cartao' ? 'Compras' : 'Saídas'}
-          value={formatBRL(outflowTotal)}
+          value={brl(outflowTotal)}
           tone={outflowTotal > 0 ? 'negative' : 'neutral'}
           hint={`Mês anterior: ${prevOutflowLabel}`}
         />
         <SummaryStat
           label={netLabel}
-          value={formatBRL(data.summary.netCents)}
+          value={brl(data.summary.netCents)}
           tone={netTone}
           hint={
             scope === 'cartao'
@@ -420,7 +423,7 @@ export function AnalysisPage() {
             slices={slices}
             size={240}
             strokeWidth={26}
-            centerLabel={formatBRL(outflowTotal)}
+            centerLabel={brl(outflowTotal)}
             centerSub={`${data.outflow.length} categoria${data.outflow.length === 1 ? '' : 's'}`}
             emptyMessage="Sem saídas no mês"
           />
@@ -436,7 +439,7 @@ export function AnalysisPage() {
         >
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-zinc-100">Detalhamento por categoria</h2>
-            <span className="text-[11px] text-zinc-500">Total: {formatBRL(outflowTotal)}</span>
+            <span className="text-[11px] text-zinc-500">Total: {brl(outflowTotal)}</span>
           </div>
           <div className="mt-3">
             <CategoryLegend

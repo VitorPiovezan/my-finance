@@ -1,5 +1,5 @@
+import { useMaskedMoney } from '../context/AmountVisibilityContext'
 import { colorForCategoryId } from './DonutChart'
-import { formatBRL } from '../lib/money'
 import type { CategorySpendRow } from '../lib/queries/categorySpend'
 
 export type HeatmapProps = {
@@ -38,6 +38,7 @@ export function CategoryHeatmap({
   onCategoryClick,
   onCellClick,
 }: HeatmapProps) {
+  const { brl, brlNoSymbol } = useMaskedMoney()
   const maxCents = rows.reduce((acc, row) => {
     for (const ym of months) {
       const v = row.byMonth[ym] ?? 0
@@ -142,7 +143,7 @@ export function CategoryHeatmap({
                           disabled={value <= 0}
                           title={
                             value > 0
-                              ? `${row.categoryName} · ${monthShortLabel(ym)} · ${formatBRL(value)} (${count} ${count === 1 ? 'lançamento' : 'lançamentos'})`
+                              ? `${row.categoryName} · ${monthShortLabel(ym)} · ${brl(value)} (${count} ${count === 1 ? 'lançamento' : 'lançamentos'})`
                               : `${row.categoryName} · ${monthShortLabel(ym)} · sem gastos`
                           }
                           className={[
@@ -154,13 +155,13 @@ export function CategoryHeatmap({
                           ].join(' ')}
                           style={{ backgroundColor: bg }}
                         >
-                          {value > 0 ? formatBRL(value).replace('R$', '').trim() : '·'}
+                          {value > 0 ? brlNoSymbol(value) : '·'}
                         </button>
                       </td>
                     )
                   })}
                   <td className="whitespace-nowrap px-4 py-2.5 text-right font-semibold tabular-nums text-zinc-100">
-                    {formatBRL(row.totalCents)}
+                    {brl(row.totalCents)}
                   </td>
                 </tr>
               )
@@ -182,16 +183,16 @@ export function CategoryHeatmap({
                     className="px-1 py-3 text-center font-medium tabular-nums text-zinc-200"
                     title={
                       v > 0
-                        ? `${monthShortLabel(ym)} · ${formatBRL(v)}`
+                        ? `${monthShortLabel(ym)} · ${brl(v)}`
                         : `${monthShortLabel(ym)} · sem gastos`
                     }
                   >
-                    {v > 0 ? formatBRL(v).replace('R$', '').trim() : '·'}
+                    {v > 0 ? brlNoSymbol(v) : '·'}
                   </td>
                 )
               })}
               <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-zinc-100">
-                {formatBRL(grandTotal)}
+                {brl(grandTotal)}
               </td>
             </tr>
           </tfoot>

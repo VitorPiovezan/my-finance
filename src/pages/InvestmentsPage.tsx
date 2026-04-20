@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useFinanceDb } from '../context/useFinanceDb'
-import { formatBRL } from '../lib/money'
+import { useMaskedMoney } from '../context/AmountVisibilityContext'
 import {
   createInvestment,
   deleteInvestment,
@@ -59,6 +59,7 @@ const EMPTY_FORM: FormState = {
 }
 
 export function InvestmentsPage() {
+  const { brl } = useMaskedMoney()
   const { getDb, touch, persistSoon, version } = useFinanceDb()
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [formOpen, setFormOpen] = useState(false)
@@ -174,11 +175,11 @@ export function InvestmentsPage() {
               Saldo total (nominal)
             </p>
             <p className="mt-1 text-3xl font-semibold tracking-tight text-emerald-100 tabular-nums">
-              {formatBRL(totals.balanceCents)}
+              {brl(totals.balanceCents)}
             </p>
             {totals.initialBalanceCents > 0 ? (
               <p className="mt-1 text-[11px] text-zinc-500">
-                Inclui {formatBRL(totals.initialBalanceCents)} de saldo inicial.
+                Inclui {brl(totals.initialBalanceCents)} de saldo inicial.
               </p>
             ) : null}
           </div>
@@ -187,7 +188,7 @@ export function InvestmentsPage() {
               Aportes no mês
             </p>
             <p className="mt-1 text-xl font-semibold text-emerald-200 tabular-nums">
-              {formatBRL(totals.contributionsCents)}
+              {brl(totals.contributionsCents)}
             </p>
             <p className="mt-1 text-[11px] text-zinc-500">
               {totals.contributionsCount}{' '}
@@ -199,7 +200,7 @@ export function InvestmentsPage() {
               Retiradas no mês
             </p>
             <p className="mt-1 text-xl font-semibold text-amber-200 tabular-nums">
-              {formatBRL(totals.withdrawalsCents)}
+              {brl(totals.withdrawalsCents)}
             </p>
             <p className="mt-1 text-[11px] text-zinc-500">
               {totals.withdrawalsCount}{' '}
@@ -351,15 +352,15 @@ export function InvestmentsPage() {
                       <p className="mt-0.5 text-[11px] text-zinc-500">{inv.institution}</p>
                     ) : null}
                     <p className="mt-2 text-xl font-semibold text-emerald-100 tabular-nums">
-                      {formatBRL(inv.balanceCents)}
+                      {brl(inv.balanceCents)}
                     </p>
                     <p className="mt-0.5 text-[11px] text-zinc-500">
-                      Inicial {formatBRL(inv.initialBalanceCents)} +{' '}
+                      Inicial {brl(inv.initialBalanceCents)} +{' '}
                       <span className="text-emerald-200">
-                        {formatBRL(inv.contributionsCents)}
+                        {brl(inv.contributionsCents)}
                       </span>{' '}
                       −{' '}
-                      <span className="text-amber-200">{formatBRL(inv.withdrawalsCents)}</span>
+                      <span className="text-amber-200">{brl(inv.withdrawalsCents)}</span>
                     </p>
                   </div>
                   <span className="shrink-0 text-[11px] text-zinc-500">
@@ -428,7 +429,7 @@ export function InvestmentsPage() {
                                 }`}
                               >
                                 {m.direction === 'in' ? '+' : '−'}
-                                {formatBRL(Math.abs(m.amountCents))}
+                                {brl(Math.abs(m.amountCents))}
                               </p>
                             </li>
                           ))}

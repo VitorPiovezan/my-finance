@@ -2,8 +2,8 @@ import { motion } from 'framer-motion'
 import { useMemo, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { colorForCategoryId } from '../components/DonutChart'
+import { useMaskedMoney } from '../context/AmountVisibilityContext'
 import { useFinanceDb } from '../context/useFinanceDb'
-import { formatBRL } from '../lib/money'
 import {
   compareCategoriesBetweenMonths,
   getMonthPulse,
@@ -27,12 +27,6 @@ function formatShortMonthLabel(ym: string): string {
   const dt = new Date(y, m - 1, 1)
   const label = dt.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
   return label.replace('.', '').replace(' de ', '/')
-}
-
-function signedBRL(cents: number): string {
-  if (cents > 0) return `+${formatBRL(cents)}`
-  if (cents < 0) return `-${formatBRL(Math.abs(cents))}`
-  return formatBRL(0)
 }
 
 function pct(ratio: number): string {
@@ -100,6 +94,7 @@ function StatColumn({
  * dos últimos meses mesmo dia.
  */
 function MonthHero({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
+  const { brl, brlSigned } = useMaskedMoney()
   const {
     realExpenseCents,
     realExpenseCreditCents,
@@ -159,27 +154,27 @@ function MonthHero({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
         <div className="grid gap-3 sm:grid-cols-3">
           <StatColumn
             label="Ganhos"
-            value={formatBRL(totalIncome)}
+            value={brl(totalIncome)}
             valueClassName="text-emerald-200"
             hint={
               pendingIncomeCents > 0
-                ? `${formatBRL(realIncomeCents)} real · ${formatBRL(pendingIncomeCents)} futuro`
+                ? `${brl(realIncomeCents)} real · ${brl(pendingIncomeCents)} futuro`
                 : 'Só entradas reais no mês'
             }
           />
           <StatColumn
             label="Gastos (cartão + futuros)"
-            value={formatBRL(spendForLeftoverCents)}
+            value={brl(spendForLeftoverCents)}
             valueClassName="text-rose-200"
             hint={
               pendingExpenseCents > 0
-                ? `${formatBRL(realExpenseCreditCents)} cartão · ${formatBRL(pendingExpenseCents)} futuro`
-                : `${formatBRL(realExpenseCreditCents)} no cartão`
+                ? `${brl(realExpenseCreditCents)} cartão · ${brl(pendingExpenseCents)} futuro`
+                : `${brl(realExpenseCreditCents)} no cartão`
             }
           />
           <StatColumn
             label="Saldo do mês"
-            value={signedBRL(projectedLeftover)}
+            value={brlSigned(projectedLeftover)}
             valueClassName={toneForLeftover(projectedLeftover)}
             hint="Ganhos − (cartão + futuros)"
           />
@@ -188,7 +183,7 @@ function MonthHero({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
         {realExpenseAccountCents > 0 ? (
           <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-2.5 text-[11px] text-zinc-400">
             <span className="font-medium text-zinc-300">
-              + {formatBRL(realExpenseAccountCents)}
+              + {brl(realExpenseAccountCents)}
             </span>{' '}
             saíram de contas/carteiras neste mês —{' '}
             <span className="text-zinc-500">
@@ -204,7 +199,7 @@ function MonthHero({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
                 Ritmo vs. média dos últimos meses
               </p>
               <p className={`text-[11px] tabular-nums ${overLimit ? 'text-rose-200' : 'text-zinc-400'}`}>
-                {formatBRL(realExpenseCents)} / {formatBRL(trailingMonthlyAverageCents)} ·{' '}
+                {brl(realExpenseCents)} / {brl(trailingMonthlyAverageCents)} ·{' '}
                 {Math.round(ratioOfAvg * 100)}%
               </p>
             </div>
@@ -216,7 +211,7 @@ function MonthHero({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
               {expectedSoFarCents > 0 && trailingMonthlyAverageCents > 0 ? (
                 <div
                   className="absolute top-0 h-full w-px bg-white/40"
-                  title={`Esperado até aqui: ${formatBRL(expectedSoFarCents)}`}
+                  title={`Esperado até aqui: ${brl(expectedSoFarCents)}`}
                   style={{ left: `${(daysElapsed / daysInMonth) * 100}%` }}
                 />
               ) : null}
@@ -233,10 +228,10 @@ function MonthHero({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
               Ritmo diário real
             </p>
             <p className="mt-1 text-lg font-semibold tracking-tight text-white tabular-nums">
-              {formatBRL(dailyRealRateCents)} <span className="text-xs font-normal text-zinc-500">/ dia</span>
+              {brl(dailyRealRateCents)} <span className="text-xs font-normal text-zinc-500">/ dia</span>
             </p>
             <p className="mt-0.5 text-[11px] text-zinc-500">
-              {formatBRL(realExpenseCents)} em {daysElapsed} {daysElapsed === 1 ? 'dia' : 'dias'}
+              {brl(realExpenseCents)} em {daysElapsed} {daysElapsed === 1 ? 'dia' : 'dias'}
             </p>
           </div>
           <div>
@@ -244,7 +239,7 @@ function MonthHero({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
               Mês passado até o dia {daysElapsed}
             </p>
             <p className="mt-1 text-lg font-semibold tracking-tight text-white tabular-nums">
-              {formatBRL(previousMonthSameDayExpenseCents)}
+              {brl(previousMonthSameDayExpenseCents)}
             </p>
             <p className="mt-0.5 text-[11px] text-zinc-500">
               {prevDiff == null
@@ -267,6 +262,7 @@ function MonthHero({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
  * com os gastos futuros já agendados pra estimar onde o mês vai fechar.
  */
 function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
+  const { brl, brlSigned } = useMaskedMoney()
   const {
     realExpenseCreditCents,
     realExpenseAccountCents,
@@ -295,7 +291,7 @@ function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
           Projeção de fim do mês
         </p>
         <p className="text-[11px] text-zinc-500">
-          Baseado em {formatBRL(dailyRealCreditRateCents)}/dia (cartão) × {daysLeft}{' '}
+          Baseado em {brl(dailyRealCreditRateCents)}/dia (cartão) × {daysLeft}{' '}
           {daysLeft === 1 ? 'dia restante' : 'dias restantes'}
         </p>
       </div>
@@ -308,25 +304,25 @@ function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
         <StatColumn
           label="Gasto projetado"
-          value={formatBRL(projectedTotalExpense)}
+          value={brl(projectedTotalExpense)}
           valueClassName="text-rose-200"
-          hint={`Cartão ${formatBRL(realExpenseCreditCents)} + proj. ${formatBRL(projectedRhythmSpendCents)}${
-            pendingExpenseCents > 0 ? ` + fut. ${formatBRL(pendingExpenseCents)}` : ''
+          hint={`Cartão ${brl(realExpenseCreditCents)} + proj. ${brl(projectedRhythmSpendCents)}${
+            pendingExpenseCents > 0 ? ` + fut. ${brl(pendingExpenseCents)}` : ''
           }`}
         />
         <StatColumn
           label="Ganho projetado"
-          value={formatBRL(projectedTotalIncome)}
+          value={brl(projectedTotalIncome)}
           valueClassName="text-emerald-200"
           hint={
             pendingIncomeCents > 0
-              ? `Real ${formatBRL(realIncomeCents)} + fut. ${formatBRL(pendingIncomeCents)}`
+              ? `Real ${brl(realIncomeCents)} + fut. ${brl(pendingIncomeCents)}`
               : 'Só entradas já confirmadas'
           }
         />
         <StatColumn
           label="Sobra projetada"
-          value={signedBRL(projectedLeftover)}
+          value={brlSigned(projectedLeftover)}
           valueClassName={toneForLeftover(projectedLeftover)}
           hint={
             projectedLeftover < 0
@@ -339,7 +335,7 @@ function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
       {realExpenseAccountCents > 0 ? (
         <p className="mt-3 text-[11px] text-zinc-500">
           <span className="text-zinc-400">
-            + {formatBRL(realExpenseAccountCents)} em contas/carteiras
+            + {brl(realExpenseAccountCents)} em contas/carteiras
           </span>{' '}
           não entram na projeção pra não duplicar pagamento do cartão.
         </p>
@@ -354,6 +350,7 @@ function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
  * rastreia nominal por enquanto.
  */
 function InvestmentsSummaryCard({ ym, totals }: { ym: string; totals: InvestmentTotals }) {
+  const { brl } = useMaskedMoney()
   const {
     balanceCents,
     initialBalanceCents,
@@ -374,11 +371,11 @@ function InvestmentsSummaryCard({ ym, totals }: { ym: string; totals: Investment
             Saldo nominal
           </p>
           <p className="mt-1 text-3xl font-semibold tracking-tight text-emerald-100 tabular-nums">
-            {formatBRL(balanceCents)}
+            {brl(balanceCents)}
           </p>
           {initialBalanceCents > 0 ? (
             <p className="mt-1 text-[11px] text-zinc-500">
-              Inclui {formatBRL(initialBalanceCents)} de saldo inicial pré-cadastrado.
+              Inclui {brl(initialBalanceCents)} de saldo inicial pré-cadastrado.
             </p>
           ) : null}
         </div>
@@ -390,7 +387,7 @@ function InvestmentsSummaryCard({ ym, totals }: { ym: string; totals: Investment
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         <StatColumn
           label={`Aportes em ${formatShortMonthLabel(ym)}`}
-          value={formatBRL(contributionsCents)}
+          value={brl(contributionsCents)}
           valueClassName="text-emerald-200"
           hint={
             contributionsCount > 0
@@ -402,7 +399,7 @@ function InvestmentsSummaryCard({ ym, totals }: { ym: string; totals: Investment
         />
         <StatColumn
           label={`Retiradas em ${formatShortMonthLabel(ym)}`}
-          value={formatBRL(withdrawalsCents)}
+          value={brl(withdrawalsCents)}
           valueClassName="text-amber-200"
           hint={
             withdrawalsCount > 0
@@ -418,6 +415,7 @@ function InvestmentsSummaryCard({ ym, totals }: { ym: string; totals: Investment
 }
 
 function DeltaRow({ row, kind }: { row: CategoryDelta; kind: 'up' | 'down' }) {
+  const { brl, brlSigned } = useMaskedMoney()
   const color = colorForCategoryId(row.categoryId)
   const isUp = kind === 'up'
   const arrow = isUp ? '↑' : '↓'
@@ -438,12 +436,12 @@ function DeltaRow({ row, kind }: { row: CategoryDelta; kind: 'up' | 'down' }) {
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-zinc-100">{row.categoryName}</p>
         <p className="mt-0.5 truncate text-[11px] text-zinc-500">
-          {formatBRL(row.currentCents)} agora · antes {formatBRL(row.previousCents)}
+          {brl(row.currentCents)} agora · antes {brl(row.previousCents)}
         </p>
       </div>
       <div className="shrink-0 text-right">
         <p className={`text-sm font-semibold tabular-nums ${arrowColor}`}>
-          <span aria-hidden="true">{arrow}</span> {signedBRL(row.deltaCents)}
+          <span aria-hidden="true">{arrow}</span> {brlSigned(row.deltaCents)}
         </p>
         {deltaLabel ? (
           <p className="text-[11px] text-zinc-500 tabular-nums">{deltaLabel}</p>
@@ -552,11 +550,12 @@ function RecordCard({
 }
 
 function RecordsGrid({ year, records }: { year: number; records: YearRecords }) {
+  const { brl, brlSigned } = useMaskedMoney()
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <RecordCard
         label="Maior gasto do ano"
-        value={records.biggestExpense ? formatBRL(-records.biggestExpense.amountCents) : '—'}
+        value={records.biggestExpense ? brl(-records.biggestExpense.amountCents) : '—'}
         subtitle={
           records.biggestExpense
             ? `${records.biggestExpense.description} · ${records.biggestExpense.accountName} · ${records.biggestExpense.occurredAt.slice(0, 10)}`
@@ -566,13 +565,13 @@ function RecordsGrid({ year, records }: { year: number; records: YearRecords }) 
       />
       <RecordCard
         label="Top categoria do ano"
-        value={records.topCategory ? formatBRL(records.topCategory.cents) : '—'}
+        value={records.topCategory ? brl(records.topCategory.cents) : '—'}
         subtitle={records.topCategory ? records.topCategory.name : 'Sem dados de categoria ainda'}
         tone="rose"
       />
       <RecordCard
         label="Melhor mês de sobra"
-        value={records.bestMonth ? signedBRL(records.bestMonth.leftoverCents) : '—'}
+        value={records.bestMonth ? brlSigned(records.bestMonth.leftoverCents) : '—'}
         subtitle={
           records.bestMonth
             ? `${formatYmLabel(records.bestMonth.ym)} — ganhos − gastos`
@@ -583,7 +582,7 @@ function RecordsGrid({ year, records }: { year: number; records: YearRecords }) 
       />
       <RecordCard
         label="Pior mês de sobra"
-        value={records.worstMonth ? signedBRL(records.worstMonth.leftoverCents) : '—'}
+        value={records.worstMonth ? brlSigned(records.worstMonth.leftoverCents) : '—'}
         subtitle={
           records.worstMonth
             ? `${formatYmLabel(records.worstMonth.ym)} — ganhos − gastos`

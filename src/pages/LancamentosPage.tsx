@@ -9,6 +9,7 @@ import {
   suggestCategory,
   type DescriptionIndex,
 } from '../lib/learning/descriptionIndex'
+import { useMaskedMoney } from '../context/AmountVisibilityContext'
 import { formatBRL } from '../lib/money'
 import { SQL_EFFECTIVE_SPEND_MONTH } from '../lib/queries/effectiveSpendMonth'
 import { listInvestments, type Investment } from '../lib/queries/investments'
@@ -42,6 +43,7 @@ const UNCAT_GROUP_KEY = '__uncat__'
 const UNCAT_FILTER_VALUE = '__uncat__'
 
 export function LancamentosPage() {
+  const { brl } = useMaskedMoney()
   const { getDb, touch, persistSoon, version } = useFinanceDb()
   const [accountId, setAccountId] = useState('')
   const [monthYm, setMonthYm] = useState(ymNow())
@@ -318,11 +320,11 @@ export function LancamentosPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="glass rounded-xl px-4 py-3">
           <p className="text-xs uppercase tracking-wide text-zinc-500">Saídas no filtro</p>
-          <p className="mt-1 text-xl font-semibold text-rose-200">{formatBRL(spendCents)}</p>
+          <p className="mt-1 text-xl font-semibold text-rose-200">{brl(spendCents)}</p>
         </div>
         <div className="glass rounded-xl px-4 py-3">
           <p className="text-xs uppercase tracking-wide text-zinc-500">Entradas no filtro</p>
-          <p className="mt-1 text-xl font-semibold text-emerald-200">{formatBRL(incomeCents)}</p>
+          <p className="mt-1 text-xl font-semibold text-emerald-200">{brl(incomeCents)}</p>
         </div>
         <div className="glass rounded-xl px-4 py-3">
           <p className="text-xs uppercase tracking-wide text-zinc-500">Sem categoria</p>
@@ -388,7 +390,7 @@ export function LancamentosPage() {
                             </span>
                           </div>
                           <span className="text-xs font-medium tabular-nums text-zinc-300">
-                            {formatBRL(g.totalAbsCents)}
+                            {brl(g.totalAbsCents)}
                           </span>
                         </div>
                       </td>
@@ -463,6 +465,7 @@ function LancamentoRow({
   onInvestmentChange,
   onDelete,
 }: LancamentoRowProps) {
+  const { brl } = useMaskedMoney()
   const amt = Number(r.amount_cents)
   const neg = amt < 0
   const rowColor = colorForCategoryId(r.category_id ? String(r.category_id) : null)
@@ -523,7 +526,7 @@ function LancamentoRow({
           neg ? 'text-rose-200' : 'text-emerald-200'
         }`}
       >
-        {formatBRL(amt)}
+        {brl(amt)}
       </td>
       <td className="min-w-0 px-4 py-2 align-top">
         <div className="flex flex-col gap-1">

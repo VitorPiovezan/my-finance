@@ -3,8 +3,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CategoryHeatmap } from '../components/CategoryHeatmap'
 import { DonutChart, colorForCategoryId, type DonutSlice } from '../components/DonutChart'
+import { useMaskedMoney } from '../context/AmountVisibilityContext'
 import { useFinanceDb } from '../context/useFinanceDb'
-import { formatBRL } from '../lib/money'
 import {
   getCategoryTransactionsInPeriod,
   getMonthCategorySpend,
@@ -108,6 +108,7 @@ function TotalSpendCard({
   summary: PeriodSummary
   isCurrentMonth: boolean
 }) {
+  const { brl } = useMaskedMoney()
   const credit = summary.creditTotalCents
   const account = summary.accountTotalCents
   const future = summary.futureExpenseCents
@@ -140,7 +141,7 @@ function TotalSpendCard({
             : 'Cartão de crédito + contas e carteiras.'
         }
       >
-        {formatBRL(topTotal)}
+        {brl(topTotal)}
       </p>
 
       {isCurrentMonth ? (
@@ -150,7 +151,7 @@ function TotalSpendCard({
               Cartão de crédito
             </p>
             <p className="mt-1 truncate text-lg font-semibold tabular-nums text-zinc-100">
-              {formatBRL(credit)}
+              {brl(credit)}
             </p>
             <p className="text-[10px] text-zinc-500">
               {creditPct}% · {summary.creditTransactionCount}{' '}
@@ -168,7 +169,7 @@ function TotalSpendCard({
               ].join(' ')}
               title="Soma de futuros cadastrados no mês (cartão + contas)."
             >
-              {formatBRL(future)}
+              {brl(future)}
             </p>
             <p className="text-[10px] text-zinc-500">
               {future > 0
@@ -181,7 +182,7 @@ function TotalSpendCard({
               Contas e carteiras
             </p>
             <p className="mt-1 truncate text-lg font-semibold tabular-nums text-zinc-100">
-              {formatBRL(account)}
+              {brl(account)}
             </p>
             <p
               className="text-[10px] text-zinc-500"
@@ -199,7 +200,7 @@ function TotalSpendCard({
               Cartão de crédito
             </p>
             <p className="mt-1 truncate text-lg font-semibold tabular-nums text-zinc-100">
-              {formatBRL(credit)}
+              {brl(credit)}
             </p>
             <p className="text-[10px] text-zinc-500">
               {creditPct}% · {summary.creditTransactionCount}{' '}
@@ -211,7 +212,7 @@ function TotalSpendCard({
               Contas e carteiras
             </p>
             <p className="mt-1 truncate text-lg font-semibold tabular-nums text-zinc-100">
-              {formatBRL(account)}
+              {brl(account)}
             </p>
             <p className="text-[10px] text-zinc-500">
               {accountPct}% · {summary.accountTransactionCount}{' '}
@@ -235,7 +236,7 @@ function TotalSpendCard({
             className="mt-1 truncate text-lg font-semibold tabular-nums text-emerald-200"
             title="Soma das entradas reais no período (sem transferências entre contas próprias)."
           >
-            {formatBRL(income)}
+            {brl(income)}
           </p>
           <p className="text-[10px] text-zinc-500">
             {summary.incomeCount}{' '}
@@ -255,7 +256,7 @@ function TotalSpendCard({
                 ].join(' ')}
                 title="Soma de futuros cadastrados como entrada (category kind = income)."
               >
-                {formatBRL(futureIncome)}
+                {brl(futureIncome)}
               </p>
               <p className="text-[10px] text-zinc-500">
                 {summary.futureIncomeCount > 0
@@ -278,7 +279,7 @@ function TotalSpendCard({
                     title="Projeção: ganho futuro − total gasto (cartão + futuros)."
                   >
                     {net >= 0 ? '+ ' : ''}
-                    {formatBRL(net)}
+                    {brl(net)}
                   </p>
                   <p className="text-[10px] text-zinc-500">projeção do mês</p>
                 </div>
@@ -346,6 +347,7 @@ function CategoryBar({
   onToggle: () => void
   transactions: CategorySpendTransaction[]
 }) {
+  const { brl } = useMaskedMoney()
   const pct = total > 0 ? (row.totalCents / total) * 100 : 0
   const color = colorForCategoryId(row.categoryId)
   return (
@@ -369,7 +371,7 @@ function CategoryBar({
           <div className="flex items-baseline justify-between gap-3">
             <p className="truncate text-sm font-medium text-zinc-100">{row.categoryName}</p>
             <p className="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-zinc-100">
-              {formatBRL(row.totalCents)}
+              {brl(row.totalCents)}
             </p>
           </div>
           <div className="mt-1.5 flex items-center gap-2">
@@ -419,7 +421,7 @@ function CategoryBar({
                         </p>
                       </div>
                       <p className="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-rose-200">
-                        {formatBRL(Math.abs(t.amountCents))}
+                        {brl(Math.abs(t.amountCents))}
                       </p>
                     </li>
                   ))}
@@ -439,6 +441,7 @@ function CategoryBar({
 }
 
 export function CategoriesAnalyticsPage() {
+  const { brl } = useMaskedMoney()
   const { getDb, version } = useFinanceDb()
   const defaultYear = new Date().getFullYear()
   const [searchParams] = useSearchParams()
@@ -634,7 +637,7 @@ export function CategoriesAnalyticsPage() {
         <TotalSpendCard summary={data.summary} isCurrentMonth={isCurrentMonth} />
         <KpiCard
           label={mode === 'year' ? 'Média mensal' : 'Diário médio'}
-          value={formatBRL(
+          value={brl(
             mode === 'year'
               ? data.summary.monthlyAverageCents
               : Math.round(data.summary.totalCents / 30),
@@ -646,7 +649,7 @@ export function CategoriesAnalyticsPage() {
           value={data.summary.topCategoryName ?? '—'}
           hint={
             data.summary.topCategoryCents > 0
-              ? formatBRL(data.summary.topCategoryCents)
+              ? brl(data.summary.topCategoryCents)
               : 'sem dados'
           }
         />
@@ -687,7 +690,7 @@ export function CategoriesAnalyticsPage() {
             slices={donutSlices}
             size={220}
             strokeWidth={24}
-            centerLabel={formatBRL(data.summary.totalCents)}
+            centerLabel={brl(data.summary.totalCents)}
             centerSub={`${data.summary.categoriesWithSpend} categoria${data.summary.categoriesWithSpend === 1 ? '' : 's'}`}
             emptyMessage="Sem gastos no período"
           />
@@ -706,7 +709,7 @@ export function CategoriesAnalyticsPage() {
               Ranking de categorias {mode === 'year' ? 'no ano' : 'no mês'}
             </h2>
             <span className="text-[11px] text-zinc-500">
-              Total: {formatBRL(data.summary.totalCents)}
+              Total: {brl(data.summary.totalCents)}
             </span>
           </div>
           {data.rows.length === 0 ? (
@@ -749,7 +752,7 @@ export function CategoriesAnalyticsPage() {
               )
               const peakLabel =
                 peak.i >= 0 && peak.v > 0
-                  ? `pico em ${months[peak.i]?.slice(5)} · ${formatBRL(peak.v)}`
+                  ? `pico em ${months[peak.i]?.slice(5)} · ${brl(peak.v)}`
                   : 'sem pico'
               return (
                 <li key={keyForRow(row)} className="flex items-center gap-3 py-2">
@@ -764,7 +767,7 @@ export function CategoriesAnalyticsPage() {
                   </div>
                   <Sparkline values={values} color={color} />
                   <p className="w-24 shrink-0 text-right text-sm font-semibold tabular-nums text-zinc-100">
-                    {formatBRL(row.totalCents)}
+                    {brl(row.totalCents)}
                   </p>
                 </li>
               )
@@ -804,15 +807,6 @@ function niceCeil(n: number): number {
   return nice * base
 }
 
-function formatBRLCompact(cents: number): string {
-  const v = cents / 100
-  const abs = Math.abs(v)
-  if (abs >= 1000) {
-    return `R$ ${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}k`
-  }
-  return `R$ ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
-}
-
 function CategoryLinesSection({
   rows,
   months,
@@ -822,6 +816,7 @@ function CategoryLinesSection({
   months: string[]
   onCategoryClick: (categoryId: string | null) => void
 }) {
+  const { brl, brlCompact } = useMaskedMoney()
   const rowsWithSpend = useMemo(() => rows.filter((r) => r.totalCents > 0), [rows])
   const defaultActive = useMemo(
     () =>
@@ -925,7 +920,7 @@ function CategoryLinesSection({
                   type="button"
                   onClick={() => toggleActive(key)}
                   onDoubleClick={() => onCategoryClick(r.categoryId)}
-                  title={`${r.categoryName} · ${formatBRL(r.totalCents)}${
+                  title={`${r.categoryName} · ${brl(r.totalCents)}${
                     isActive ? '' : ' (oculto)'
                   }`}
                   className={[
@@ -974,7 +969,7 @@ function CategoryLinesSection({
                       fontSize="10"
                       fill="rgba(161,161,170,0.85)"
                     >
-                      {formatBRLCompact(t)}
+                      {brlCompact(t)}
                     </text>
                   </g>
                 )
@@ -1079,6 +1074,7 @@ function HoverSummary({
   ym: string
   rows: CategorySpendRow[]
 }) {
+  const { brl } = useMaskedMoney()
   const items = rows
     .map((r) => ({
       id: r.categoryId ?? UNCAT_KEY,
@@ -1110,7 +1106,7 @@ function HoverSummary({
               />
               <span>{it.name}</span>
               <span className="tabular-nums text-zinc-400">
-                {formatBRL(it.value)}
+                {brl(it.value)}
               </span>
             </li>
           ))}

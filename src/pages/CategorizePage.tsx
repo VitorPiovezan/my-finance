@@ -7,6 +7,7 @@ import {
   colorForCategoryId,
   type DonutSlice,
 } from '../components/DonutChart'
+import { useMaskedMoney } from '../context/AmountVisibilityContext'
 import { useFinanceDb } from '../context/useFinanceDb'
 import { queryAll, run } from '../lib/db/query'
 import {
@@ -14,7 +15,6 @@ import {
   suggestCategory,
   type DescriptionIndex,
 } from '../lib/learning/descriptionIndex'
-import { formatBRL } from '../lib/money'
 import {
   getAnalysisSummary,
   getInflowByCategory,
@@ -141,6 +141,7 @@ function CategoryLegend({
   expandedTransactions: TopTransaction[]
   emptyMessage: string
 }) {
+  const { brl } = useMaskedMoney()
   if (items.length === 0) {
     return <p className="text-sm text-zinc-500">{emptyMessage}</p>
   }
@@ -178,7 +179,7 @@ function CategoryLegend({
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <p className="whitespace-nowrap font-semibold tabular-nums text-zinc-100">
-                  {formatBRL(it.cents)}
+                  {brl(it.cents)}
                 </p>
                 <span
                   aria-hidden="true"
@@ -219,7 +220,7 @@ function CategoryLegend({
                             <p
                               className={`shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums ${amountColor}`}
                             >
-                              {formatBRL(Math.abs(t.amountCents))}
+                              {brl(Math.abs(t.amountCents))}
                             </p>
                           </li>
                         ))}
@@ -237,6 +238,7 @@ function CategoryLegend({
 }
 
 export function CategorizePage() {
+  const { brl } = useMaskedMoney()
   const { getDb, touch, persistSoon, version } = useFinanceDb()
 
   // Inicialização única: respeita a preferência salva (conta + mês + atalho de escopo).
@@ -539,13 +541,13 @@ export function CategorizePage() {
         />
         <KpiCard
           label="Saídas"
-          value={formatBRL(outflowTotal)}
+          value={brl(outflowTotal)}
           tone={outflowTotal > 0 ? 'rose' : 'neutral'}
           hint={`${data.outflow.length} categoria${data.outflow.length === 1 ? '' : 's'}`}
         />
         <KpiCard
           label="Entradas"
-          value={formatBRL(inflowTotal)}
+          value={brl(inflowTotal)}
           tone={inflowTotal > 0 ? 'emerald' : 'neutral'}
           hint={`${data.inflow.length} categoria${data.inflow.length === 1 ? '' : 's'}`}
         />
@@ -572,7 +574,7 @@ export function CategorizePage() {
                 slices={slices}
                 size={240}
                 strokeWidth={26}
-                centerLabel={formatBRL(outflowTotal)}
+                centerLabel={brl(outflowTotal)}
                 centerSub={`${data.outflow.length} categoria${data.outflow.length === 1 ? '' : 's'}`}
                 emptyMessage="Sem saídas neste filtro"
               />
@@ -587,7 +589,7 @@ export function CategorizePage() {
                 <h2 className="text-sm font-semibold text-zinc-100">
                   Detalhamento por categoria
                 </h2>
-                <span className="text-[11px] text-zinc-500">Total: {formatBRL(outflowTotal)}</span>
+                <span className="text-[11px] text-zinc-500">Total: {brl(outflowTotal)}</span>
               </div>
               <div className="mt-3">
                 <CategoryLegend
@@ -620,7 +622,7 @@ export function CategorizePage() {
                           <span className="truncate text-sm text-zinc-100">{it.categoryName}</span>
                         </div>
                         <span className="shrink-0 whitespace-nowrap text-sm font-semibold text-emerald-200 tabular-nums">
-                          {formatBRL(it.cents)}
+                          {brl(it.cents)}
                         </span>
                       </li>
                     ))}
@@ -699,6 +701,7 @@ function CategorizeRow({
   onCategoryChange: (txId: string, value: string) => void
   onInvestmentChange: (txId: string, value: string) => void
 }) {
+  const { brl } = useMaskedMoney()
   const neg = r.amount_cents < 0
   const rowColor = colorForCategoryId(r.category_id)
   const isUncat = !r.category_id
@@ -737,7 +740,7 @@ function CategorizeRow({
           neg ? 'text-rose-200' : 'text-emerald-200'
         }`}
       >
-        {formatBRL(r.amount_cents)}
+        {brl(r.amount_cents)}
       </td>
       <td className="px-4 py-2">
         <div className="flex flex-col gap-1">

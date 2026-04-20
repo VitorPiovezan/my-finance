@@ -7,6 +7,16 @@ export function formatBRL(cents: number): string {
   }).format(cents / 100)
 }
 
+/** Formato curto para células densas (ex.: mapa de calor). */
+export function formatBRLCompact(cents: number): string {
+  const v = cents / 100
+  const abs = Math.abs(v)
+  if (abs >= 1000) {
+    return `R$ ${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}k`
+  }
+  return `R$ ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
+}
+
 export function parseBRLToCents(input: string): number | null {
   const trimmed = input.trim()
   if (!trimmed) return null

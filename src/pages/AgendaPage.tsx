@@ -3,7 +3,8 @@ import { type FormEvent, useMemo, useState } from 'react'
 import { useFinanceDb } from '../context/useFinanceDb'
 import { queryAll, run } from '../lib/db/query'
 import { newId } from '../lib/id'
-import { formatBRL, parseBRLToCents } from '../lib/money'
+import { useMaskedMoney } from '../context/AmountVisibilityContext'
+import { parseBRLToCents } from '../lib/money'
 
 const KINDS = [
   { value: 'boleto', label: 'Boleto' },
@@ -47,6 +48,7 @@ function centsToBRLInput(cents: number): string {
 }
 
 export function AgendaPage() {
+  const { brl } = useMaskedMoney()
   const { getDb, touch, persistSoon, version } = useFinanceDb()
   const [title, setTitle] = useState('')
   const [amount, setAmount] = useState('')
@@ -499,7 +501,7 @@ export function AgendaPage() {
                           {p.title || 'Sem título'}
                         </p>
                         <p className="shrink-0 text-sm font-semibold tabular-nums text-zinc-100">
-                          {formatBRL(p.amountCents)}
+                          {brl(p.amountCents)}
                         </p>
                       </div>
                       <p className="mt-0.5 truncate text-[11px] text-zinc-500">
@@ -838,14 +840,14 @@ export function AgendaPage() {
                           className="text-sm font-semibold text-emerald-200"
                           title="Categoria income — conta como entrada na Visão geral."
                         >
-                          + {formatBRL(Number(s.amount_cents))}
+                          + {brl(Number(s.amount_cents))}
                         </span>
                       ) : (
                         <span
                           className="text-sm font-semibold text-white"
                           title="Conta como despesa na Visão geral."
                         >
-                          {formatBRL(Number(s.amount_cents))}
+                          {brl(Number(s.amount_cents))}
                         </span>
                       )}
                       {s.paid_at ? (
