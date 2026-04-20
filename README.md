@@ -46,14 +46,14 @@ Depois do primeiro push, abra **Settings → Pages** e em "Source" escolha
 
 ### Secrets suportados (Settings → Secrets and variables → Actions)
 
-Só um secret entra no bundle público: o hash do PIN. Todas as outras
-credenciais (chave do Gemini, OAuth Client ID, Drive folder) são cadastradas
-pelo próprio usuário dentro do app e ficam no SQLite local do navegador —
-nunca vazam no JS servido pelo Pages.
+Só um secret entra no bundle público: o PIN do gate, em texto puro. Todas
+as outras credenciais (chave do Gemini, OAuth Client ID, Drive folder) são
+cadastradas pelo próprio usuário dentro do app e ficam no SQLite local do
+navegador — nunca vazam no JS servido pelo Pages.
 
-| Nome                         | Obrigatório | Descrição |
-|------------------------------|-------------|-----------|
-| `VITE_APP_ACCESS_PIN_SHA256` | recomendado | Hash SHA-256 (hex, 64 chars) do PIN de acesso. Sem isto o site abre sem PIN. Veja "Gerando o hash do PIN" abaixo. |
+| Nome                  | Obrigatório | Descrição |
+|-----------------------|-------------|-----------|
+| `VITE_APP_ACCESS_PIN` | recomendado | PIN de acesso em texto puro. Sem isto o site abre sem PIN. É visível no bundle público — trate como obstáculo leve, não como segurança forte. |
 
 ### Credenciais configuradas pelo app (não vão pro repositório)
 
@@ -68,22 +68,11 @@ Esses valores ficam gravados na tabela `meta` do SQLite local e acompanham
 o backup `.sqlite`. Importando o backup em outro navegador, as credenciais
 vêm junto — é só não compartilhar o arquivo.
 
-### Gerando o hash do PIN
+### Sobre o PIN
 
-O PIN em si não fica no bundle — só o hash. Gere o SHA-256 de uma das formas:
-
-```bash
-echo -n "MEU_PIN" | sha256sum
-# ou
-node -e "console.log(require('crypto').createHash('sha256').update('MEU_PIN').digest('hex'))"
-```
-
-Copie os 64 caracteres hex e cole em `VITE_APP_ACCESS_PIN_SHA256`.
-
-**Avisos**: `VITE_*` são embarcados no JS público. Com o hash, o PIN em texto
-puro não aparece, mas PIN curto (ex.: 4 dígitos numéricos) é trivial de
-quebrar por brute-force offline. Use algo com tamanho e charset decente
-(ex.: `7Fm9qK42` ou maior) se isso te preocupa.
+O valor de `VITE_APP_ACCESS_PIN` vai direto pro bundle JS público. Qualquer
+pessoa com DevTools consegue lê-lo. Use o PIN como *gate* simples pra evitar
+acesso casual, não como mecanismo de segurança sério.
 
 A sessão é guardada no `sessionStorage` e dura enquanto a aba/janela fica
 aberta — fechar o navegador obriga a digitar o PIN de novo.

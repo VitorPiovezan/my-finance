@@ -2,6 +2,8 @@ import { type FormEvent, type ReactNode, useState } from 'react'
 import { motion } from 'framer-motion'
 import { isPinConfigured, isSessionUnlocked, tryUnlockWithPin } from '../lib/sessionPin'
 
+
+
 /**
  * Envolve toda a aplicação. Enquanto a sessão não estiver destravada, nada
  * do `<App/>` é montado — inclusive rotas diretas (deep-link). Após o acerto,
@@ -17,14 +19,13 @@ export function LockGate({ children }: { children: ReactNode }) {
   if (!isPinConfigured()) return <>{children}</>
   if (unlocked) return <>{children}</>
 
-  const onSubmit = async (e: FormEvent) => {
+  const onSubmit = (e: FormEvent) => {
     e.preventDefault()
     if (busy) return
     setErr(null)
     setBusy(true)
     try {
-      const ok = await tryUnlockWithPin(pin)
-      if (ok) {
+      if (tryUnlockWithPin(pin)) {
         setUnlocked(true)
         setPin('')
       } else {
@@ -44,7 +45,7 @@ export function LockGate({ children }: { children: ReactNode }) {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
-        onSubmit={(e) => void onSubmit(e)}
+        onSubmit={onSubmit}
         className="glass glow-ring w-full max-w-sm rounded-2xl p-8"
       >
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-2">
