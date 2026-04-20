@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useFinanceDb } from '../context/useFinanceDb'
 import {
   DEFAULT_GEMINI_MODEL,
   clearGeminiApiKey,
@@ -17,37 +18,37 @@ function maskKey(key: string): string {
 }
 
 export function ConfigIaPage() {
-  const [apiKey, setApiKey] = useState('')
-  const [model, setModel] = useState('')
-  const [source, setSource] = useState<'localStorage' | 'env' | null>(null)
+  const { getDb, touch, persistSoon, version } = useFinanceDb()
+
+  // Lazy init lê do banco; nos re-renders após mutação (`version` muda),
+  // o `storedKey`/`storedModel` abaixo pegam o estado atualizado.
+  const [apiKey, setApiKey] = useState<string>(() => getGeminiApiKey(getDb()))
+  const [model, setModel] = useState<string>(() => getGeminiModel(getDb()))
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [show, setShow] = useState(false)
 
-  useEffect(() => {
-    const cur = getGeminiApiKey()
-    setApiKey(cur.source === 'localStorage' ? cur.key : '')
-    setSource(cur.source)
-    setModel(getGeminiModel())
-  }, [])
+  const storedKey = getGeminiApiKey(getDb())
+  const storedModel = getGeminiModel(getDb())
+  // Sinaliza o uso da dependência `version` pra lints de exhaustive-deps.
+  void version
 
   const save = () => {
-    setGeminiApiKey(apiKey)
-    setGeminiModel(model)
-    const cur = getGeminiApiKey()
-    setSource(cur.source)
+    const db = getDb()
+    setGeminiApiKey(db, apiKey)
+    setGeminiModel(db, model)
+    touch()
+    persistSoon()
     setSavedAt(Date.now())
   }
 
   const clear = () => {
-    clearGeminiApiKey()
+    const db = getDb()
+    clearGeminiApiKey(db)
+    touch()
+    persistSoon()
     setApiKey('')
-    const cur = getGeminiApiKey()
-    setSource(cur.source)
     setSavedAt(Date.now())
   }
-
-  const currentStored = getGeminiApiKey()
-  const usingEnv = source === 'env'
 
   return (
     <div className="space-y-6">
@@ -63,7 +64,7 @@ export function ConfigIaPage() {
           Configurar IA (Google Gemini)
         </motion.h1>
         <p className="max-w-2xl text-sm text-zinc-400">
-          Use uma chave do <strong className="text-zinc-300">Google Gemini</strong> para categorizar automaticamente os lançamentos sem categoria. A chave fica salva no <strong className="text-zinc-300">localStorage</strong> deste navegador e é enviada direto para a API do Google — nada passa por servidor intermediário. Pegue a sua em{' '}
+          Use uma chave do <strong className="text-zinc-300">Google Gemini</strong> para categorizar automaticamente os lançamentos sem categoria. A chave fica salva no <strong className="text-zinc-300">banco local (SQLite)</strong> — só neste navegador, acompanhando o backup <code className="rounded bg-surface-2 px-1.5 py-0.5">.sqlite</code>. Pegue a sua em{' '}
           <a
             href="https://aistudio.google.com/app/apikey"
             target="_blank"
@@ -93,7 +94,7 @@ export function ConfigIaPage() {
               autoComplete="off"
               spellCheck={false}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder={usingEnv ? 'Vem da VITE_GEMINI_API_KEY (sobrescreva aqui se quiser)' : 'AIzaSy...'}
+              placeholder="AIzaSy..."
               className="flex-1 rounded-xl border border-white/10 bg-surface-1 px-3 py-2.5 text-sm text-white outline-none ring-accent/30 focus:ring-2"
             />
             <button
@@ -105,11 +106,9 @@ export function ConfigIaPage() {
             </button>
           </div>
           <p className="mt-2 text-[11px] text-zinc-500">
-            {usingEnv
-              ? `Atualmente usando a chave definida em VITE_GEMINI_API_KEY (${maskKey(currentStored.key)}). Digite uma nova para sobrescrever só neste navegador.`
-              : currentStored.key
-                ? `Chave salva neste navegador: ${maskKey(currentStored.key)}`
-                : 'Nenhuma chave configurada ainda.'}
+            {storedKey
+              ? `Chave salva no banco local: ${maskKey(storedKey)}`
+              : 'Nenhuma chave configurada ainda.'}
           </p>
         </div>
 
@@ -125,7 +124,8 @@ export function ConfigIaPage() {
             className="mt-2 w-full rounded-xl border border-white/10 bg-surface-1 px-3 py-2.5 text-sm text-white outline-none ring-accent/30 focus:ring-2"
           />
           <p className="mt-2 text-[11px] text-zinc-500">
-            Padrão: <code className="rounded bg-surface-2 px-1.5 py-0.5">{DEFAULT_GEMINI_MODEL}</code>. Sugestões:{' '}
+            Em uso:{' '}
+            <code className="rounded bg-surface-2 px-1.5 py-0.5">{storedModel}</code>. Sugestões:{' '}
             <code className="rounded bg-surface-2 px-1.5 py-0.5">gemini-2.5-flash</code>,{' '}
             <code className="rounded bg-surface-2 px-1.5 py-0.5">gemini-2.0-flash</code>,{' '}
             <code className="rounded bg-surface-2 px-1.5 py-0.5">gemini-1.5-flash</code>,{' '}
@@ -146,7 +146,7 @@ export function ConfigIaPage() {
             onClick={clear}
             className="rounded-xl border border-danger/40 bg-danger/10 px-4 py-2 text-sm text-rose-200 hover:bg-danger/20"
           >
-            Remover chave deste navegador
+            Remover chave do banco
           </button>
           {savedAt ? (
             <span className="self-center text-[11px] text-zinc-500">Atualizado {new Date(savedAt).toLocaleTimeString('pt-BR')}</span>
@@ -161,12 +161,12 @@ export function ConfigIaPage() {
       >
         <h2 className="text-sm font-semibold text-zinc-200">Como funciona</h2>
         <ul className="mt-3 list-disc space-y-1.5 pl-5">
-          <li>Abra uma análise (card na visão geral) e clique em <strong className="text-zinc-200">Categorizar com IA</strong>.</li>
-          <li>Enviamos para o Gemini só os lançamentos <strong className="text-zinc-200">sem categoria</strong> do mês/escopo atual (descrição, valor, conta). Nenhum servidor intermediário vê esses dados.</li>
+          <li>Abra a tela <strong className="text-zinc-200">Categorizar</strong> ou uma análise e clique em <strong className="text-zinc-200">Categorizar com IA</strong>.</li>
+          <li>Enviamos para o Gemini só os lançamentos <strong className="text-zinc-200">sem categoria</strong> do recorte atual (descrição, valor, conta). Nenhum servidor intermediário vê esses dados.</li>
           <li>A resposta é aplicada como sugestão automática; você pode reverter manualmente em <Link to="/lancamentos" className="text-accent-2 hover:underline">Lançamentos</Link>.</li>
         </ul>
         <p className="mt-3 text-[11px] text-zinc-500">
-          Variáveis <code className="rounded bg-surface-2 px-1.5 py-0.5">VITE_*</code> entram no bundle do app. Se você publicar o app, prefira salvar a chave <strong className="text-zinc-300">aqui</strong> (localStorage) e deixar a variável do <code className="rounded bg-surface-2 px-1.5 py-0.5">.env</code> vazia.
+          A chave fica só neste navegador, gravada no SQLite local. Ao exportar o banco ela vai junto no arquivo <code className="rounded bg-surface-2 px-1.5 py-0.5">.sqlite</code> — guarde com cuidado.
         </p>
       </motion.section>
     </div>

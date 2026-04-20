@@ -1,66 +1,42 @@
+import type { Database } from 'sql.js'
+import { SETTING_KEYS, getSetting, removeSetting, setSetting } from '../settings/appSettings'
+
 /**
- * Configuração da IA (Google Gemini) — local-first.
+ * Configuração da IA (Google Gemini) — local-first, zero env.
  *
- * A chave pode vir de duas fontes (nessa ordem):
- *   1. `localStorage` (preferida): configurada no próprio app. Fica só neste navegador.
- *   2. `VITE_GEMINI_API_KEY` no build: usado só se `localStorage` estiver vazio.
+ * A chave e o modelo ficam na tabela `meta` do SQLite local. Assim:
+ *   - Seguem o export/import do `.sqlite` (backup completo).
+ *   - Não vazam no bundle público em deploys.
  *
- * Aviso: variáveis `VITE_*` entram no bundle do front. Se você publicar o app,
- * prefira a configuração local pelo UI e deixe a `VITE_GEMINI_API_KEY` em branco no `.env`.
+ * Pegue uma chave em https://aistudio.google.com/app/apikey.
  */
 
-const LS_KEY = 'ai.gemini.apiKey'
-const LS_MODEL = 'ai.gemini.model'
+export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
 
-export const DEFAULT_GEMINI_MODEL =
-  (import.meta.env.VITE_GEMINI_MODEL as string | undefined)?.trim() || 'gemini-2.5-flash'
+export function getGeminiApiKey(db: Database): string {
+  return getSetting(db, SETTING_KEYS.aiGeminiApiKey)
+}
 
-function safeLocalStorage(): Storage | null {
-  try {
-    if (typeof window === 'undefined') return null
-    return window.localStorage
-  } catch {
-    return null
+export function setGeminiApiKey(db: Database, key: string): void {
+  setSetting(db, SETTING_KEYS.aiGeminiApiKey, key)
+}
+
+export function clearGeminiApiKey(db: Database): void {
+  removeSetting(db, SETTING_KEYS.aiGeminiApiKey)
+}
+
+export function getGeminiModel(db: Database): string {
+  return getSetting(db, SETTING_KEYS.aiGeminiModel) || DEFAULT_GEMINI_MODEL
+}
+
+export function setGeminiModel(db: Database, model: string): void {
+  if (!model.trim() || model.trim() === DEFAULT_GEMINI_MODEL) {
+    removeSetting(db, SETTING_KEYS.aiGeminiModel)
+    return
   }
+  setSetting(db, SETTING_KEYS.aiGeminiModel, model)
 }
 
-export type AiKeySource = 'localStorage' | 'env' | null
-
-export function getGeminiApiKey(): { key: string; source: AiKeySource } {
-  const ls = safeLocalStorage()
-  const fromLs = ls?.getItem(LS_KEY)?.trim()
-  if (fromLs) return { key: fromLs, source: 'localStorage' }
-  const fromEnv = (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim()
-  if (fromEnv) return { key: fromEnv, source: 'env' }
-  return { key: '', source: null }
-}
-
-export function setGeminiApiKey(key: string): void {
-  const ls = safeLocalStorage()
-  if (!ls) return
-  const trimmed = key.trim()
-  if (!trimmed) ls.removeItem(LS_KEY)
-  else ls.setItem(LS_KEY, trimmed)
-}
-
-export function clearGeminiApiKey(): void {
-  safeLocalStorage()?.removeItem(LS_KEY)
-}
-
-export function getGeminiModel(): string {
-  const ls = safeLocalStorage()
-  const fromLs = ls?.getItem(LS_MODEL)?.trim()
-  return fromLs || DEFAULT_GEMINI_MODEL
-}
-
-export function setGeminiModel(model: string): void {
-  const ls = safeLocalStorage()
-  if (!ls) return
-  const trimmed = model.trim()
-  if (!trimmed) ls.removeItem(LS_MODEL)
-  else ls.setItem(LS_MODEL, trimmed)
-}
-
-export function isAiConfigured(): boolean {
-  return getGeminiApiKey().key.length > 0
+export function isAiConfigured(db: Database): boolean {
+  return getGeminiApiKey(db).length > 0
 }

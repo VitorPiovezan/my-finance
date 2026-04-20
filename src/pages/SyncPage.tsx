@@ -8,8 +8,11 @@ import { applyCsvImport } from '../lib/import/applyCsv'
 import { parseBankCsv } from '../lib/import/csv'
 import {
   extractDriveFolderId,
+  getDriveOauthClientId,
   getDriveRootFolderId,
   isLikelyDriveFolderId,
+  isLikelyGoogleOauthClientId,
+  setDriveOauthClientId,
   setDriveRootFolderId,
 } from '../lib/settings/driveFolder'
 import { parseBillingRefYm } from '../lib/import/billingMonth'
@@ -28,8 +31,8 @@ export function SyncPage() {
     persistNow,
     replaceDatabaseFromFile,
   } = useFinanceDb()
-  const clientId = (import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID ?? '').trim()
-  const [rootId, setRootId] = useState(getDriveRootFolderId)
+  const [clientId, setClientId] = useState<string>(() => getDriveOauthClientId(getDb()))
+  const [rootId, setRootId] = useState<string>(() => getDriveRootFolderId(getDb()))
   const [token, setToken] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [log, setLog] = useState<string[]>([])
@@ -49,17 +52,41 @@ export function SyncPage() {
   }, [])
 
   const connectGoogle = async () => {
-    if (!clientId) {
-      appendLog('Defina VITE_GOOGLE_OAUTH_CLIENT_ID no arquivo .env')
+    const trimmed = clientId.trim()
+    if (!trimmed) {
+      appendLog('Cadastre o OAuth Client ID do Google no campo acima antes de conectar.')
+      return
+    }
+    if (!isLikelyGoogleOauthClientId(trimmed)) {
+      appendLog('O Client ID deve terminar em ".apps.googleusercontent.com". Confira o valor colado.')
       return
     }
     try {
-      const t = await requestDriveAccessToken(clientId, true)
+      const t = await requestDriveAccessToken(trimmed, true)
       setToken(t)
       appendLog('Google conectado (token válido por algumas horas; reconecte se der 401).')
     } catch (e) {
       appendLog(e instanceof Error ? e.message : 'Falha ao conectar Google')
     }
+  }
+
+  const persistClientId = () => {
+    const trimmed = clientId.trim()
+    if (!trimmed) {
+      setDriveOauthClientId(getDb(), '')
+      touch()
+      persistSoon()
+      appendLog('OAuth Client ID removido.')
+      return
+    }
+    if (!isLikelyGoogleOauthClientId(trimmed)) {
+      appendLog('O Client ID deve terminar em ".apps.googleusercontent.com".')
+      return
+    }
+    setDriveOauthClientId(getDb(), trimmed)
+    touch()
+    persistSoon()
+    appendLog('OAuth Client ID salvo no banco local.')
   }
 
   const persistRoot = () => {
@@ -68,9 +95,11 @@ export function SyncPage() {
       appendLog('Não parece um ID de pasta. Cole o link do Drive (…/folders/…) ou só o ID após /folders/.')
       return
     }
-    setDriveRootFolderId(id)
+    setDriveRootFolderId(getDb(), id)
     setRootId(id)
-    appendLog('ID da pasta raiz salvo neste navegador.')
+    touch()
+    persistSoon()
+    appendLog('ID da pasta raiz salvo no banco local.')
   }
 
   const runSync = async () => {
@@ -246,13 +275,24 @@ export function SyncPage() {
             </div>
           ) : null}
         </div>
-        {!clientId ? (
-          <p className="text-sm text-warning">
-            Client ID ausente. Crie um projeto no Google Cloud, ative a API Drive e um OAuth Client ID (aplicação web),
-            depois coloque em <span className="font-mono text-zinc-300">VITE_GOOGLE_OAUTH_CLIENT_ID</span>.
-          </p>
-        ) : null}
         <div className="grid gap-4 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">OAuth Client ID (Google)</label>
+            <input
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/10 bg-surface-1 px-4 py-2.5 font-mono text-sm text-white outline-none ring-accent/30 focus:ring-2"
+              placeholder="0000…apps.googleusercontent.com"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <p className="mt-2 text-xs text-zinc-500">
+              Crie um projeto no Google Cloud, ative a API do Drive e um OAuth 2.0 Client ID (aplicação Web).
+              Nas <em>Authorized JavaScript origins</em> adicione o domínio onde o app roda (ex.:{' '}
+              <code className="rounded bg-surface-2 px-1 py-0.5">https://vitorpiovezan.github.io</code>).
+              O valor fica salvo no banco local (SQLite) deste navegador — nunca entra no bundle público.
+            </p>
+          </div>
           <div className="md:col-span-2">
             <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">Pasta raiz no Drive</label>
             <input
@@ -260,14 +300,22 @@ export function SyncPage() {
               onChange={(e) => setRootId(e.target.value)}
               className="mt-2 w-full rounded-xl border border-white/10 bg-surface-1 px-4 py-2.5 font-mono text-sm text-white outline-none ring-accent/30 focus:ring-2"
               placeholder="Cole o link da pasta ou só o ID (…/folders/ESTE_TRECHO)"
+              autoComplete="off"
+              spellCheck={false}
             />
             <p className="mt-2 text-xs text-zinc-500">
-              Pode colar a URL inteira. Também pode vir de <span className="font-mono">VITE_DRIVE_FINANCE_ROOT_FOLDER_ID</span>{' '}
-              no <span className="font-mono">.env</span>.
+              Pode colar a URL inteira — a gente extrai o ID automaticamente.
             </p>
           </div>
         </div>
         <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => persistClientId()}
+            className="rounded-xl border border-white/10 bg-surface-2 px-4 py-2 text-sm text-zinc-100 hover:bg-surface-3"
+          >
+            Salvar Client ID
+          </button>
           <button
             type="button"
             onClick={() => persistRoot()}

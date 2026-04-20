@@ -46,18 +46,27 @@ Depois do primeiro push, abra **Settings → Pages** e em "Source" escolha
 
 ### Secrets suportados (Settings → Secrets and variables → Actions)
 
-Todas são opcionais a menos que você queira a funcionalidade correspondente.
-Como VITE_* vai pro bundle público, os valores podem ser inspecionados no
-DevTools de qualquer visitante. Trate-os como "semi-públicos" e restrinja no
-provedor (domínios autorizados, quotas, etc).
+Só um secret entra no bundle público: o hash do PIN. Todas as outras
+credenciais (chave do Gemini, OAuth Client ID, Drive folder) são cadastradas
+pelo próprio usuário dentro do app e ficam no SQLite local do navegador —
+nunca vazam no JS servido pelo Pages.
 
-| Nome                                  | Obrigatório | Descrição |
-|---------------------------------------|-------------|-----------|
-| `VITE_APP_ACCESS_PIN_SHA256`          | recomendado | Hash SHA-256 (hex, 64 chars) do PIN de acesso. Veja abaixo como gerar. Sem isto, o site abre sem PIN. |
-| `VITE_GOOGLE_OAUTH_CLIENT_ID`         | opcional    | OAuth Client ID (Web) pra ler a pasta do Drive. Restrinja as Authorized JavaScript origins pro seu domínio do Pages. |
-| `VITE_DRIVE_FINANCE_ROOT_FOLDER_ID`   | opcional    | ID da pasta raiz no Drive. Também pode ser salvo direto no app. |
-| `VITE_GEMINI_API_KEY`                 | **evite**   | Chave Gemini pra categorização automática. **Prefira deixar em branco** e cadastrar a chave na tela "Configurar IA" — ela fica só no localStorage do seu navegador, não vaza no bundle. |
-| `VITE_GEMINI_MODEL`                   | opcional    | Ex.: `gemini-2.5-flash`. Pode ser sobrescrito no app. |
+| Nome                         | Obrigatório | Descrição |
+|------------------------------|-------------|-----------|
+| `VITE_APP_ACCESS_PIN_SHA256` | recomendado | Hash SHA-256 (hex, 64 chars) do PIN de acesso. Sem isto o site abre sem PIN. Veja "Gerando o hash do PIN" abaixo. |
+
+### Credenciais configuradas pelo app (não vão pro repositório)
+
+Abra o app depois do deploy, digite o PIN e cadastre no próprio banco local:
+
+| Onde cadastrar        | O quê                                                        |
+|-----------------------|--------------------------------------------------------------|
+| **Configurar IA**     | Chave do Google Gemini + modelo (`gemini-2.5-flash`, etc).   |
+| **Sincronizar**       | OAuth Client ID do Google + ID da pasta raiz no Drive.       |
+
+Esses valores ficam gravados na tabela `meta` do SQLite local e acompanham
+o backup `.sqlite`. Importando o backup em outro navegador, as credenciais
+vêm junto — é só não compartilhar o arquivo.
 
 ### Gerando o hash do PIN
 

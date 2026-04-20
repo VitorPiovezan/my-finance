@@ -28,7 +28,7 @@ export function AiCategorizeButton({ ym, filter }: Props) {
     [getDb, ym, filterKey, version, status],
   )
 
-  const configured = isAiConfigured()
+  const configured = isAiConfigured(getDb())
   const running = status.phase === 'running'
 
   const onRun = async () => {

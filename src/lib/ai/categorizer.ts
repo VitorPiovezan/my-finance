@@ -246,11 +246,11 @@ export async function categorizeWithAi(
   db: Database,
   opts: CategorizeOptions,
 ): Promise<CategorizeResult> {
-  const { key } = getGeminiApiKey()
+  const key = getGeminiApiKey(db)
   if (!key) {
-    throw new Error('Configure sua chave do Gemini em "Configurar IA" (ou na .env VITE_GEMINI_API_KEY).')
+    throw new Error('Configure sua chave do Gemini em "Configurar IA".')
   }
-  const model = getGeminiModel()
+  const model = getGeminiModel(db)
 
   const categories = loadCategories(db)
   const categoryIds = new Set(categories.map((c) => c.id))

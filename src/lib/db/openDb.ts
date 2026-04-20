@@ -2,6 +2,7 @@ import initSqlJs, { type Database } from 'sql.js'
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 import { MIGRATION_SQL } from './schema'
 import { seedIfEmpty } from './seed'
+import { migrateLegacySettings } from '../settings/appSettings'
 
 function migrateAccountsInvoiceCloseDay(db: Database): void {
   try {
@@ -33,5 +34,6 @@ export async function createFinanceDatabase(buffer?: ArrayBuffer): Promise<Datab
   migrateAccountsInvoiceCloseDay(db)
   migrateBillingRefColumns(db)
   seedIfEmpty(db)
+  migrateLegacySettings(db)
   return db
 }
