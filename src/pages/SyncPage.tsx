@@ -50,8 +50,9 @@ export function SyncPage() {
     persistNow,
     replaceDatabaseFromFile,
   } = useFinanceDb()
-  const [clientId, setClientId] = useState<string>(() => getDriveOauthClientId(getDb()))
-  const [rootId, setRootId] = useState<string>(() => getDriveRootFolderId(getDb()))
+  /** Efetivo (meta + env) para o campo não ficar vazio quando só existe VITE_* ou após restore. */
+  const [clientId, setClientId] = useState<string>(() => getEffectiveDriveOauthClientId(getDb()))
+  const [rootId, setRootId] = useState<string>(() => getEffectiveDriveRootFolderId(getDb()))
   const [token, setToken] = useState<string | null>(() =>
     loadDriveSessionToken(getEffectiveDriveOauthClientId(getDb())),
   )
@@ -80,6 +81,26 @@ export function SyncPage() {
   const appendLog = useCallback((line: string) => {
     setLog((prev) => [...prev.slice(-200), `[${new Date().toLocaleTimeString('pt-BR')}] ${line}`])
   }, [])
+
+  /** Grava no SQLite o que está no formulário antes de puxar/enviar/sincronizar — evita pasta só no input e merge sem meta. */
+  const flushDriveFormToMeta = useCallback(() => {
+    const db = getDb()
+    let changed = false
+    const cid = clientId.trim()
+    if (cid && isLikelyGoogleOauthClientId(cid) && getDriveOauthClientId(db).trim() !== cid) {
+      setDriveOauthClientId(db, cid)
+      changed = true
+    }
+    const rid = extractDriveFolderId(rootId)
+    if (isLikelyDriveFolderId(rid) && getDriveRootFolderId(db).trim() !== rid) {
+      setDriveRootFolderId(db, rid)
+      changed = true
+    }
+    if (changed) {
+      touch()
+      persistSoon()
+    }
+  }, [clientId, rootId, getDb, touch, persistSoon])
 
   /** Upload com token explícito (logo após OAuth o state `token` ainda não atualizou). */
   const runPushBackupWithToken = async (accessToken: string) => {
@@ -270,6 +291,8 @@ export function SyncPage() {
       appendLog('Conecte o Google antes.')
       return
     }
+    flushDriveFormToMeta()
+    await persistNow()
     const id = getEffectiveDriveRootFolderId(getDb())
     if (!isLikelyDriveFolderId(id)) {
       appendLog('ID da pasta inválido. Salve no banco ou defina VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID no build.')
@@ -301,6 +324,8 @@ export function SyncPage() {
       appendLog('Conecte o Google antes (botão "Conectar Google").')
       return
     }
+    flushDriveFormToMeta()
+    await persistNow()
     await runPushBackupWithToken(token)
   }
 
@@ -309,6 +334,8 @@ export function SyncPage() {
       appendLog('Conecte o Google antes.')
       return
     }
+    flushDriveFormToMeta()
+    await persistNow()
     const id = getEffectiveDriveRootFolderId(getDb())
     if (!isLikelyDriveFolderId(id)) {
       appendLog('Salve o ID da pasta raiz no banco ou defina VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID no build.')
