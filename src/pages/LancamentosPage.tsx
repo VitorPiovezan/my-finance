@@ -39,11 +39,14 @@ type GroupMode = 'date' | 'category'
 
 const UNCAT_GROUP_KEY = '__uncat__'
 
+const UNCAT_FILTER_VALUE = '__uncat__'
+
 export function LancamentosPage() {
   const { getDb, touch, persistSoon, version } = useFinanceDb()
   const [accountId, setAccountId] = useState('')
   const [monthYm, setMonthYm] = useState(ymNow())
   const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
   const [groupMode, setGroupMode] = useState<GroupMode>('category')
 
   const accounts = useMemo(() => {
@@ -80,6 +83,12 @@ export function LancamentosPage() {
       parts.push('t.description LIKE ?')
       params.push(`%${safeSearch}%`)
     }
+    if (categoryFilter === UNCAT_FILTER_VALUE) {
+      parts.push('t.category_id IS NULL')
+    } else if (categoryFilter) {
+      parts.push('t.category_id = ?')
+      params.push(categoryFilter)
+    }
     const where = parts.join(' AND ')
     const sql = `
       SELECT
@@ -113,7 +122,7 @@ export function LancamentosPage() {
     }
     return { rows: list, spendCents: spend, incomeCents: income }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getDb, version, accountId, monthYm, search])
+  }, [getDb, version, accountId, monthYm, search, categoryFilter])
 
   const onCategoryChange = (txId: string, value: string) => {
     const db = getDb()
@@ -145,6 +154,19 @@ export function LancamentosPage() {
   const onBillingRefChange = (txId: string, value: string) => {
     const db = getDb()
     run(db, 'UPDATE transactions SET billing_ref_ym = ? WHERE id = ?', [value || null, txId])
+    touch()
+    persistSoon()
+  }
+
+  const onDelete = (txId: string, description: string, amountCents: number) => {
+    const pretty = `${description.slice(0, 60)}${description.length > 60 ? '…' : ''}`
+    const valueLabel = formatBRL(amountCents)
+    const ok = window.confirm(
+      `Excluir este lançamento?\n\n${pretty}\nValor: ${valueLabel}\n\nEssa ação não pode ser desfeita.`,
+    )
+    if (!ok) return
+    const db = getDb()
+    run(db, 'DELETE FROM transactions WHERE id = ?', [txId])
     touch()
     persistSoon()
   }
@@ -246,6 +268,22 @@ export function LancamentosPage() {
             className="mt-2 w-full rounded-xl border border-white/10 bg-surface-1 px-3 py-2.5 text-sm text-white outline-none ring-accent/30 focus:ring-2"
           />
         </div>
+        <div className="min-w-[200px] flex-1">
+          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">Categoria</label>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-white/10 bg-surface-1 px-3 py-2.5 text-sm text-white outline-none ring-accent/30 focus:ring-2"
+          >
+            <option value="">Todas</option>
+            <option value={UNCAT_FILTER_VALUE}>Sem categoria</option>
+            {categories.map((c) => (
+              <option key={String(c.id)} value={String(c.id)}>
+                {String(c.name)} ({String(c.kind)})
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="min-w-[180px]">
           <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">Ordenar por</label>
           <div className="mt-2 inline-flex overflow-hidden rounded-xl border border-white/10 bg-surface-1">
@@ -300,20 +338,25 @@ export function LancamentosPage() {
 
       <div className="glass overflow-hidden rounded-2xl">
         <div className="max-h-[min(70vh,720px)] overflow-auto">
-          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
             <thead className="sticky top-0 z-10 bg-surface-2/95 backdrop-blur">
               <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-zinc-500">
                 <th className="min-w-[140px] px-4 py-3 font-medium">Data</th>
-                <th className="px-4 py-3 font-medium">Conta</th>
-                <th className="px-4 py-3 font-medium">Descrição</th>
-                <th className="px-4 py-3 text-right font-medium">Valor</th>
-                <th className="min-w-[220px] px-4 py-3 font-medium">Categoria</th>
+                <th className="min-w-[100px] max-w-[160px] px-4 py-3 font-medium">Conta</th>
+                <th className="min-w-[160px] px-4 py-3 font-medium">Descrição</th>
+                <th className="w-[100px] whitespace-nowrap px-4 py-3 text-right font-medium">
+                  Valor
+                </th>
+                <th className="min-w-[240px] px-4 py-3 font-medium">Categoria</th>
+                <th className="w-12 whitespace-nowrap px-2 py-3 text-center font-medium">
+                  Ações
+                </th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-zinc-500">
+                  <td colSpan={6} className="px-4 py-10 text-center text-zinc-500">
                     Nenhum lançamento com esses filtros.
                   </td>
                 </tr>
@@ -330,7 +373,7 @@ export function LancamentosPage() {
                       className={`border-y border-white/10 ${headerTone}`}
                       style={{ boxShadow: `inset 3px 0 0 ${groupColor}` }}
                     >
-                      <td colSpan={5} className="px-4 py-2.5">
+                      <td colSpan={6} className="px-4 py-2.5">
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
                             <span
@@ -362,6 +405,7 @@ export function LancamentosPage() {
                         onCategoryChange={onCategoryChange}
                         onBillingRefChange={onBillingRefChange}
                         onInvestmentChange={onInvestmentChange}
+                        onDelete={onDelete}
                       />
                     )),
                   ]
@@ -379,6 +423,7 @@ export function LancamentosPage() {
                     onCategoryChange={onCategoryChange}
                     onBillingRefChange={onBillingRefChange}
                     onInvestmentChange={onInvestmentChange}
+                    onDelete={onDelete}
                   />
                 ))
               )}
@@ -403,6 +448,7 @@ type LancamentoRowProps = {
   onCategoryChange: (txId: string, value: string) => void
   onBillingRefChange: (txId: string, value: string) => void
   onInvestmentChange: (txId: string, value: string) => void
+  onDelete: (txId: string, description: string, amountCents: number) => void
 }
 
 function LancamentoRow({
@@ -415,6 +461,7 @@ function LancamentoRow({
   onCategoryChange,
   onBillingRefChange,
   onInvestmentChange,
+  onDelete,
 }: LancamentoRowProps) {
   const amt = Number(r.amount_cents)
   const neg = amt < 0
@@ -478,9 +525,9 @@ function LancamentoRow({
       >
         {formatBRL(amt)}
       </td>
-      <td className="px-4 py-2">
+      <td className="min-w-0 px-4 py-2 align-top">
         <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <span
               aria-hidden="true"
               className={`h-2 w-2 shrink-0 rounded-full ${isUncat ? 'opacity-40' : ''}`}
@@ -489,7 +536,7 @@ function LancamentoRow({
             <select
               value={r.category_id ? String(r.category_id) : ''}
               onChange={(e) => onCategoryChange(String(r.id), e.target.value)}
-              className="w-full max-w-[240px] rounded-lg border border-white/10 bg-surface-1 px-2 py-1.5 text-xs text-white outline-none ring-accent/20 focus:ring-1"
+              className="min-w-0 max-w-full rounded-lg border border-white/10 bg-surface-1 px-2 py-1.5 text-xs text-white outline-none ring-accent/20 focus:ring-1"
             >
               <option value="">Sem categoria</option>
               {categories.map((c) => (
@@ -537,7 +584,7 @@ function LancamentoRow({
                   ? 'Vincular aporte a um investimento (opcional).'
                   : 'Vincular retirada a um investimento (opcional).'
               }
-              className="w-full max-w-[240px] rounded-md border border-emerald-500/20 bg-emerald-400/5 px-2 py-1 text-[11px] text-emerald-100 outline-none ring-emerald-400/30 focus:ring-1"
+              className="max-w-full rounded-md border border-emerald-500/20 bg-emerald-400/5 px-2 py-1 text-[11px] text-emerald-100 outline-none ring-emerald-400/30 focus:ring-1"
             >
               <option value="">
                 {categoryKind === 'investment_in'
@@ -552,6 +599,40 @@ function LancamentoRow({
             </select>
           ) : null}
         </div>
+      </td>
+      <td className="w-12 px-1 py-2 text-center align-top">
+        <button
+          type="button"
+          onClick={() =>
+            onDelete(
+              String(r.id),
+              String(r.description ?? ''),
+              Number(r.amount_cents),
+            )
+          }
+          aria-label="Excluir lançamento"
+          title="Excluir lançamento"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/5 bg-transparent text-zinc-500 transition hover:border-rose-400/30 hover:bg-rose-500/10 hover:text-rose-200"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            <path d="M10 11v6" />
+            <path d="M14 11v6" />
+            <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+          </svg>
+        </button>
       </td>
     </motion.tr>
   )
