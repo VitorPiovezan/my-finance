@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useFinanceDb } from '../context/useFinanceDb'
 import { queryAll, run } from '../lib/db/query'
@@ -15,6 +15,8 @@ import {
   extractDriveFolderId,
   getDriveOauthClientId,
   getDriveRootFolderId,
+  getEffectiveDriveOauthClientId,
+  getEffectiveDriveRootFolderId,
   isLikelyDriveFolderId,
   isLikelyGoogleOauthClientId,
   setDriveOauthClientId,
@@ -44,9 +46,11 @@ export function SyncPage() {
   const [clientId, setClientId] = useState<string>(() => getDriveOauthClientId(getDb()))
   const [rootId, setRootId] = useState<string>(() => getDriveRootFolderId(getDb()))
   const [token, setToken] = useState<string | null>(() =>
-    loadDriveSessionToken(getDriveOauthClientId(getDb())),
+    loadDriveSessionToken(getEffectiveDriveOauthClientId(getDb())),
   )
   const [busy, setBusy] = useState(false)
+  const logTapCountRef = useRef(0)
+  const logTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [log, setLog] = useState<string[]>([])
   const [assignStatementMonth, setAssignStatementMonth] = useState(true)
   const [refMonthCartao, setRefMonthCartao] = useState(() => ymNow())
@@ -59,18 +63,53 @@ export function SyncPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getDb, version])
 
+  /** Botão principal só quando Client ID e pasta raiz estão preenchidos e válidos no formulário. */
+  const formConnectReady = useMemo(() => {
+    const c = clientId.trim()
+    const r = extractDriveFolderId(rootId)
+    return !!(c && isLikelyGoogleOauthClientId(c) && isLikelyDriveFolderId(r))
+  }, [clientId, rootId])
+
   const appendLog = useCallback((line: string) => {
     setLog((prev) => [...prev.slice(-200), `[${new Date().toLocaleTimeString('pt-BR')}] ${line}`])
   }, [])
 
-  const connectGoogle = async () => {
+  const connectGoogle = async (opts?: { fromEasterEgg?: boolean }) => {
+    if (opts?.fromEasterEgg) {
+      const trimmed = getEffectiveDriveOauthClientId(getDb()).trim()
+      if (!trimmed) {
+        appendLog('Sem Client ID disponível (configure no campo ou no deploy).')
+        return
+      }
+      if (!isLikelyGoogleOauthClientId(trimmed)) {
+        appendLog('O Client ID deve terminar em ".apps.googleusercontent.com".')
+        return
+      }
+      try {
+        const res = await requestDriveAccessToken(trimmed, true)
+        saveDriveSessionToken(trimmed, res.accessToken, res.expiresInSec)
+        setToken(res.accessToken)
+        appendLog(
+          'Google conectado. Preencha os campos e salve a pasta raiz para sincronizar ou use o backup no Drive.',
+        )
+      } catch (e) {
+        appendLog(e instanceof Error ? e.message : 'Falha ao conectar Google')
+      }
+      return
+    }
+
     const trimmed = clientId.trim()
     if (!trimmed) {
-      appendLog('Cadastre o OAuth Client ID do Google no campo acima antes de conectar.')
+      appendLog('Preencha o OAuth Client ID no campo acima.')
       return
     }
     if (!isLikelyGoogleOauthClientId(trimmed)) {
       appendLog('O Client ID deve terminar em ".apps.googleusercontent.com". Confira o valor colado.')
+      return
+    }
+    const rootEff = extractDriveFolderId(rootId)
+    if (!isLikelyDriveFolderId(rootEff)) {
+      appendLog('Preencha a pasta raiz no campo acima (link ou ID).')
       return
     }
     try {
@@ -83,6 +122,18 @@ export function SyncPage() {
     } catch (e) {
       appendLog(e instanceof Error ? e.message : 'Falha ao conectar Google')
     }
+  }
+
+  const handleLogTripleClick = () => {
+    if (logTapTimerRef.current) clearTimeout(logTapTimerRef.current)
+    logTapCountRef.current += 1
+    logTapTimerRef.current = setTimeout(() => {
+      logTapCountRef.current = 0
+    }, 650)
+    if (logTapCountRef.current < 3) return
+    logTapCountRef.current = 0
+    if (logTapTimerRef.current) clearTimeout(logTapTimerRef.current)
+    void connectGoogle({ fromEasterEgg: true })
   }
 
   const disconnectGoogle = () => {
@@ -139,9 +190,9 @@ export function SyncPage() {
       appendLog('Conecte o Google antes.')
       return
     }
-    const id = extractDriveFolderId(rootId)
+    const id = getEffectiveDriveRootFolderId(getDb())
     if (!isLikelyDriveFolderId(id)) {
-      appendLog('ID da pasta inválido. Salve de novo com o link …/folders/… ou só o ID.')
+      appendLog('ID da pasta inválido. Salve no banco ou defina VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID no build.')
       return
     }
     setBusy(true)
@@ -170,9 +221,9 @@ export function SyncPage() {
       appendLog('Conecte o Google antes (botão "Conectar Google").')
       return
     }
-    const id = extractDriveFolderId(rootId)
+    const id = getEffectiveDriveRootFolderId(getDb())
     if (!isLikelyDriveFolderId(id)) {
-      appendLog('Salve o ID da pasta raiz antes de enviar o backup.')
+      appendLog('Salve o ID da pasta raiz no banco ou defina VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID no build.')
       return
     }
     setBusy(true)
@@ -202,9 +253,9 @@ export function SyncPage() {
       appendLog('Conecte o Google antes.')
       return
     }
-    const id = extractDriveFolderId(rootId)
+    const id = getEffectiveDriveRootFolderId(getDb())
     if (!isLikelyDriveFolderId(id)) {
-      appendLog('Salve o ID da pasta raiz antes de baixar o backup.')
+      appendLog('Salve o ID da pasta raiz no banco ou defina VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID no build.')
       return
     }
     const ok = window.confirm(
@@ -384,12 +435,9 @@ export function SyncPage() {
             <p className="mt-2 text-xs text-zinc-500">
               Crie um projeto no Google Cloud, ative a API do Drive e um OAuth 2.0 Client ID (aplicação Web).
               Nas <em>Authorized JavaScript origins</em> adicione o domínio onde o app roda (ex.:{' '}
-              <code className="rounded bg-surface-2 px-1 py-0.5">https://vitorpiovezan.github.io</code>).
-              No OAuth consent screen, inclua os escopos do Drive para leitura e para arquivos criados pelo app
-              (importação de CSV e backup <span className="font-mono">.sqlite</span>). O valor fica salvo no banco
-              local deste navegador — nunca entra no bundle público. Se você já tinha conectado antes, use{' '}
-              <strong className="text-zinc-300">Conectar Google</strong> de novo para aceitar a permissão de envio do
-              backup.
+              <code className="rounded bg-surface-2 px-1 py-0.5">https://seu-usuario.github.io</code>). O que você salvar
+              neste navegador tem prioridade sobre qualquer padrão do deploy. Se já conectou antes, use{' '}
+              <strong className="text-zinc-300">Conectar Google</strong> de novo após mudar escopos.
             </p>
           </div>
           <div className="md:col-span-2">
@@ -424,8 +472,14 @@ export function SyncPage() {
           </button>
           <button
             type="button"
+            disabled={busy || !formConnectReady}
+            title={
+              formConnectReady
+                ? 'Obter token OAuth do Google'
+                : 'Preencha os dois campos acima com valores válidos.'
+            }
             onClick={() => void connectGoogle()}
-            className="rounded-xl bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/15"
+            className="rounded-xl bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Conectar Google
           </button>
@@ -440,9 +494,14 @@ export function SyncPage() {
           ) : null}
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !formConnectReady}
+            title={
+              formConnectReady
+                ? 'Sincronizar extratos com a pasta do Drive'
+                : 'Preencha os dois campos acima com valores válidos.'
+            }
             onClick={() => void runSync()}
-            className="rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-accent/20 disabled:opacity-50"
+            className="rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? 'Sincronizando…' : 'Sincronizar agora'}
           </button>
@@ -467,17 +526,27 @@ export function SyncPage() {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || !formConnectReady}
+              title={
+                formConnectReady
+                  ? 'Grava o banco atual deste navegador no Drive'
+                  : 'Preencha os dois campos acima com valores válidos.'
+              }
               onClick={() => void pushBackupToDrive()}
-              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-500/20 disabled:opacity-50"
+              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? 'Trabalhando…' : 'Enviar / atualizar backup no Drive'}
             </button>
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || !formConnectReady}
+              title={
+                formConnectReady
+                  ? 'Baixa o backup do Drive e substitui o banco local'
+                  : 'Preencha os dois campos acima com valores válidos.'
+              }
               onClick={() => void pullBackupFromDrive()}
-              className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-500/20 disabled:opacity-50"
+              className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? 'Trabalhando…' : 'Puxar backup do Drive e restaurar'}
             </button>
@@ -503,11 +572,12 @@ export function SyncPage() {
               type="month"
               value={localStatementMonth}
               onChange={(e) => setLocalStatementMonth(e.target.value)}
-              disabled={busy}
-              className="mt-2 block rounded-xl border border-white/10 bg-surface-1 px-3 py-2 font-mono text-sm text-white outline-none ring-accent/30 focus:ring-2 disabled:opacity-50"
+              disabled={busy || !formConnectReady}
+              title={formConnectReady ? undefined : 'Preencha os dois campos acima com valores válidos.'}
+              className="mt-2 block rounded-xl border border-white/10 bg-surface-1 px-3 py-2 font-mono text-sm text-white outline-none ring-accent/30 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
-          <LocalCsvRow accounts={accounts} disabled={busy} onImport={onLocalCsv} />
+          <LocalCsvRow accounts={accounts} disabled={busy || !formConnectReady} onImport={onLocalCsv} />
         </div>
         <button
           type="button"
@@ -568,7 +638,12 @@ export function SyncPage() {
       </motion.section>
 
       <section className="glass rounded-2xl p-4">
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Log</h2>
+        <h2
+          className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500"
+          onClick={handleLogTripleClick}
+        >
+          Log
+        </h2>
         <pre className="max-h-80 overflow-auto whitespace-pre-wrap font-mono text-xs text-zinc-400">
           {log.length === 0 ? 'Nenhuma mensagem ainda.' : log.join('\n')}
         </pre>
@@ -587,12 +662,15 @@ function LocalCsvRow({
   onImport: (file: File | null, accountId: string) => void | Promise<void>
 }) {
   const [acc, setAcc] = useState('')
+  const csvBlocked = disabled || !acc
   return (
     <div className="flex flex-wrap items-center gap-3">
       <select
         value={acc}
         onChange={(e) => setAcc(e.target.value)}
-        className="rounded-xl border border-white/10 bg-surface-1 px-3 py-2 text-sm text-white outline-none"
+        disabled={disabled}
+        title={disabled ? 'Preencha os dois campos acima com valores válidos.' : undefined}
+        className="rounded-xl border border-white/10 bg-surface-1 px-3 py-2 text-sm text-white outline-none disabled:cursor-not-allowed disabled:opacity-50"
       >
         <option value="">Conta…</option>
         {accounts.map((a) => (
@@ -601,12 +679,25 @@ function LocalCsvRow({
           </option>
         ))}
       </select>
-      <label className="cursor-pointer rounded-xl border border-white/10 bg-surface-2 px-4 py-2 text-sm hover:bg-surface-3">
+      <label
+        title={
+          disabled
+            ? 'Preencha os dois campos acima com valores válidos.'
+            : !acc
+              ? 'Escolha uma conta primeiro.'
+              : 'Importar CSV desta conta'
+        }
+        className={`rounded-xl border border-white/10 bg-surface-2 px-4 py-2 text-sm ${
+          csvBlocked
+            ? 'cursor-not-allowed opacity-50 pointer-events-none'
+            : 'cursor-pointer hover:bg-surface-3'
+        }`}
+      >
         Escolher CSV
         <input
           type="file"
           accept=".csv,text/csv"
-          disabled={disabled || !acc}
+          disabled={csvBlocked}
           className="hidden"
           onChange={(e) => void onImport(e.target.files?.[0] ?? null, acc)}
         />

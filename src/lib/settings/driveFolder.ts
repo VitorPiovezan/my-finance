@@ -36,6 +36,34 @@ export function getDriveOauthClientId(db: Database): string {
   return getSetting(db, SETTING_KEYS.driveOauthClientId)
 }
 
+/** Client ID injetado no build (`VITE_GOOGLE_OAUTH_CLIENT_ID`). Visível no bundle. */
+export function getDriveOauthClientIdFromEnv(): string {
+  return (import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID ?? '').trim()
+}
+
+/** Pasta raiz injetada no build (`VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID`). Visível no bundle. */
+export function getDriveRootFolderIdFromEnv(): string {
+  return extractDriveFolderId((import.meta.env.VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID ?? '').trim())
+}
+
+/**
+ * Client ID efetivo: valor salvo no SQLite tem prioridade; se vazio, usa o do build (secrets / .env).
+ */
+export function getEffectiveDriveOauthClientId(db: Database): string {
+  const fromDb = getDriveOauthClientId(db).trim()
+  if (fromDb) return fromDb
+  return getDriveOauthClientIdFromEnv()
+}
+
+/**
+ * ID da pasta raiz efetivo: banco primeiro; se vazio, usa o do build.
+ */
+export function getEffectiveDriveRootFolderId(db: Database): string {
+  const fromDb = getDriveRootFolderId(db).trim()
+  if (fromDb) return fromDb
+  return getDriveRootFolderIdFromEnv()
+}
+
 export function setDriveOauthClientId(db: Database, clientId: string): void {
   setSetting(db, SETTING_KEYS.driveOauthClientId, clientId)
 }

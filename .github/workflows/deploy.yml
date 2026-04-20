@@ -33,12 +33,12 @@ jobs:
         env:
           # Sub-path do Pages: https://<user>.github.io/my-finance/
           VITE_BASE_PATH: /my-finance/
-          # Único secret que ainda entra no bundle: o PIN do gate (texto puro).
-          # Ele é visível no JS público; é um obstáculo leve, não segurança forte.
-          # As demais credenciais (chave do Gemini, OAuth Client ID, Drive folder)
-          # são configuradas pelo próprio usuário dentro do app e ficam no SQLite
-          # local — nunca entram no bundle público.
+          # PIN do gate (texto puro no bundle).
           VITE_APP_ACCESS_PIN: ${{ secrets.VITE_APP_ACCESS_PIN }}
+          # Opcionais: padrão do deploy; o SQLite local sobrescreve se o usuário salvar na UI.
+          # Ainda assim entram no JS público — não são segredo.
+          VITE_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GOOGLE_OAUTH_CLIENT_ID }}
+          VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID: ${{ secrets.VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID }}
         run: npm run build
 
       - name: Upload Pages artifact
