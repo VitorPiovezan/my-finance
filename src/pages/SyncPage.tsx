@@ -3,6 +3,11 @@ import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useFinanceDb } from '../context/useFinanceDb'
 import { queryAll, run } from '../lib/db/query'
+import {
+  clearDriveSessionToken,
+  loadDriveSessionToken,
+  saveDriveSessionToken,
+} from '../lib/drive/driveTokenSession'
 import { requestDriveAccessToken } from '../lib/drive/googleAuth'
 import { applyCsvImport } from '../lib/import/applyCsv'
 import { parseBankCsv } from '../lib/import/csv'
@@ -16,6 +21,11 @@ import {
   setDriveRootFolderId,
 } from '../lib/settings/driveFolder'
 import { parseBillingRefYm } from '../lib/import/billingMonth'
+import {
+  SQLITE_DRIVE_BACKUP_NAME,
+  downloadSqliteBackupBytes,
+  uploadSqliteBackupToDrive,
+} from '../lib/drive/sqliteDriveBackup'
 import { ymNow } from '../lib/queries/spendSummary'
 import { syncDriveToDatabase } from '../lib/sync/driveSync'
 import type { Row } from '../lib/db/query'
@@ -33,7 +43,9 @@ export function SyncPage() {
   } = useFinanceDb()
   const [clientId, setClientId] = useState<string>(() => getDriveOauthClientId(getDb()))
   const [rootId, setRootId] = useState<string>(() => getDriveRootFolderId(getDb()))
-  const [token, setToken] = useState<string | null>(null)
+  const [token, setToken] = useState<string | null>(() =>
+    loadDriveSessionToken(getDriveOauthClientId(getDb())),
+  )
   const [busy, setBusy] = useState(false)
   const [log, setLog] = useState<string[]>([])
   const [assignStatementMonth, setAssignStatementMonth] = useState(true)
@@ -62,18 +74,30 @@ export function SyncPage() {
       return
     }
     try {
-      const t = await requestDriveAccessToken(trimmed, true)
-      setToken(t)
-      appendLog('Google conectado (token válido por algumas horas; reconecte se der 401).')
+      const res = await requestDriveAccessToken(trimmed, true)
+      saveDriveSessionToken(trimmed, res.accessToken, res.expiresInSec)
+      setToken(res.accessToken)
+      appendLog(
+        'Google conectado. O token fica nesta aba até expirar ou você desconectar; pode mudar de página à vontade.',
+      )
     } catch (e) {
       appendLog(e instanceof Error ? e.message : 'Falha ao conectar Google')
     }
   }
 
+  const disconnectGoogle = () => {
+    clearDriveSessionToken()
+    setToken(null)
+    appendLog('Sessão Google desconectada nesta aba.')
+  }
+
   const persistClientId = () => {
+    const prev = getDriveOauthClientId(getDb())
     const trimmed = clientId.trim()
     if (!trimmed) {
       setDriveOauthClientId(getDb(), '')
+      clearDriveSessionToken()
+      setToken(null)
       touch()
       persistSoon()
       appendLog('OAuth Client ID removido.')
@@ -84,9 +108,17 @@ export function SyncPage() {
       return
     }
     setDriveOauthClientId(getDb(), trimmed)
+    if (prev !== trimmed) {
+      clearDriveSessionToken()
+      setToken(null)
+    }
     touch()
     persistSoon()
-    appendLog('OAuth Client ID salvo no banco local.')
+    appendLog(
+      prev !== trimmed
+        ? 'OAuth Client ID salvo. Conecte o Google de novo (o token anterior era do outro ID).'
+        : 'OAuth Client ID salvo no banco local.',
+    )
   }
 
   const persistRoot = () => {
@@ -129,6 +161,69 @@ export function SyncPage() {
     } catch (e) {
       appendLog(e instanceof Error ? e.message : String(e))
     } finally {
+      setBusy(false)
+    }
+  }
+
+  const pushBackupToDrive = async () => {
+    if (!token) {
+      appendLog('Conecte o Google antes (botão "Conectar Google").')
+      return
+    }
+    const id = extractDriveFolderId(rootId)
+    if (!isLikelyDriveFolderId(id)) {
+      appendLog('Salve o ID da pasta raiz antes de enviar o backup.')
+      return
+    }
+    setBusy(true)
+    try {
+      await persistNow()
+      const data = getDb().export()
+      const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
+      const res = await uploadSqliteBackupToDrive({
+        token,
+        rootFolderId: id,
+        data: bytes,
+      })
+      appendLog(
+        res.created
+          ? `Backup "${SQLITE_DRIVE_BACKUP_NAME}" criado no Drive (id ${res.fileId.slice(0, 8)}…).`
+          : `Backup "${SQLITE_DRIVE_BACKUP_NAME}" atualizado no Drive.`,
+      )
+    } catch (e) {
+      appendLog(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const pullBackupFromDrive = async () => {
+    if (!token) {
+      appendLog('Conecte o Google antes.')
+      return
+    }
+    const id = extractDriveFolderId(rootId)
+    if (!isLikelyDriveFolderId(id)) {
+      appendLog('Salve o ID da pasta raiz antes de baixar o backup.')
+      return
+    }
+    const ok = window.confirm(
+      `Baixar "${SQLITE_DRIVE_BACKUP_NAME}" do Drive e SUBSTITUIR o banco deste navegador?\n\n` +
+        `É o mesmo que "Restaurar de arquivo .sqlite" — não dá para desfazer. ` +
+        `Dica: exporte uma cópia local antes se quiser guardar o estado atual.`,
+    )
+    if (!ok) return
+    setBusy(true)
+    try {
+      const { bytes } = await downloadSqliteBackupBytes(token, id)
+      const file = new File([new Uint8Array(bytes)], SQLITE_DRIVE_BACKUP_NAME, {
+        type: 'application/x-sqlite3',
+      })
+      await replaceDatabaseFromFile(file)
+      appendLog('Backup do Drive aplicado. Recarregando…')
+      setTimeout(() => window.location.reload(), 400)
+    } catch (e) {
+      appendLog(e instanceof Error ? e.message : String(e))
       setBusy(false)
     }
   }
@@ -290,7 +385,11 @@ export function SyncPage() {
               Crie um projeto no Google Cloud, ative a API do Drive e um OAuth 2.0 Client ID (aplicação Web).
               Nas <em>Authorized JavaScript origins</em> adicione o domínio onde o app roda (ex.:{' '}
               <code className="rounded bg-surface-2 px-1 py-0.5">https://vitorpiovezan.github.io</code>).
-              O valor fica salvo no banco local (SQLite) deste navegador — nunca entra no bundle público.
+              No OAuth consent screen, inclua os escopos do Drive para leitura e para arquivos criados pelo app
+              (importação de CSV e backup <span className="font-mono">.sqlite</span>). O valor fica salvo no banco
+              local deste navegador — nunca entra no bundle público. Se você já tinha conectado antes, use{' '}
+              <strong className="text-zinc-300">Conectar Google</strong> de novo para aceitar a permissão de envio do
+              backup.
             </p>
           </div>
           <div className="md:col-span-2">
@@ -330,6 +429,15 @@ export function SyncPage() {
           >
             Conectar Google
           </button>
+          {token ? (
+            <button
+              type="button"
+              onClick={() => disconnectGoogle()}
+              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-400 hover:border-white/20 hover:text-zinc-200"
+            >
+              Desconectar sessão
+            </button>
+          ) : null}
           <button
             type="button"
             disabled={busy}
@@ -338,6 +446,42 @@ export function SyncPage() {
           >
             {busy ? 'Sincronizando…' : 'Sincronizar agora'}
           </button>
+        </div>
+        <p className="text-[11px] text-zinc-500">
+          {token
+            ? 'Google conectado nesta aba — o token fica salvo na sessão até expirar (cerca de 1 h) ou até você desconectar / fechar a aba.'
+            : 'Depois de conectar, você pode sair desta página: a sessão continua nesta aba do navegador.'}
+        </p>
+
+        <div className="space-y-3 border-t border-white/10 pt-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+            Backup .sqlite na pasta raiz
+          </h3>
+          <p className="text-sm text-zinc-400">
+            Na pasta raiz (a mesma do link acima), o app usa o arquivo fixo{' '}
+            <span className="font-mono text-zinc-300">{SQLITE_DRIVE_BACKUP_NAME}</span>.{' '}
+            <strong className="text-zinc-300">Enviar</strong> grava ou atualiza esse arquivo com o banco atual deste
+            navegador. <strong className="text-zinc-300">Puxar</strong> baixa do Drive e restaura por cima do local (como
+            &quot;Restaurar de arquivo&quot;).
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void pushBackupToDrive()}
+              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-500/20 disabled:opacity-50"
+            >
+              {busy ? 'Trabalhando…' : 'Enviar / atualizar backup no Drive'}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void pullBackupFromDrive()}
+              className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-500/20 disabled:opacity-50"
+            >
+              {busy ? 'Trabalhando…' : 'Puxar backup do Drive e restaurar'}
+            </button>
+          </div>
         </div>
       </motion.section>
 

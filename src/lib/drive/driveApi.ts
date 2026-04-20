@@ -20,11 +20,15 @@ async function driveFetch<T>(token: string, path: string): Promise<T> {
 export async function listFolderChildren(
   token: string,
   folderId: string,
-  opts?: { mimeType?: string; nameContains?: string },
+  opts?: { mimeType?: string; nameContains?: string; nameEquals?: string },
 ): Promise<DriveFile[]> {
   const parts = [`'${folderId}' in parents`, 'trashed = false']
   if (opts?.mimeType) parts.push(`mimeType = '${opts.mimeType}'`)
   if (opts?.nameContains) parts.push(`name contains '${opts.nameContains.replace(/'/g, "\\'")}'`)
+  if (opts?.nameEquals) {
+    const esc = opts.nameEquals.replace(/'/g, "\\'")
+    parts.push(`name = '${esc}'`)
+  }
   const q = encodeURIComponent(parts.join(' and '))
   const files: DriveFile[] = []
   let pageToken: string | undefined
@@ -49,6 +53,19 @@ export async function downloadFileText(token: string, fileId: string): Promise<s
     throw new Error(`Download ${r.status}: ${err.slice(0, 200)}`)
   }
   return r.text()
+}
+
+/** Download binário (ex.: .sqlite). */
+export async function downloadFileBytes(token: string, fileId: string): Promise<Uint8Array> {
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!r.ok) {
+    const err = await r.text()
+    throw new Error(`Download ${r.status}: ${err.slice(0, 200)}`)
+  }
+  const buf = await r.arrayBuffer()
+  return new Uint8Array(buf)
 }
 
 export function normalizeInstitutionKey(name: string): string {
