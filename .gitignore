@@ -1,0 +1,39 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build / deps
+node_modules
+dist
+dist-ssr
+*.local
+
+# Env files (segredos do deploy)
+.env
+.env.*
+!.env.example
+
+# Dumps do banco local (NUNCA commitar — contém lançamentos reais)
+*.sqlite
+*.sqlite3
+*.db
+
+# CSVs reais de extratos bancários (contêm CPF/CNPJ/contas)
+csv-examples/
+**/csv-examples/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

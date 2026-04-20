@@ -1,0 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --color-surface-0: #07080d;
+  --color-surface-1: #0e1018;
+  --color-surface-2: #151826;
+  --color-surface-3: #1c2033;
+  --color-accent: #7c5cff;
+  --color-accent-2: #38bdf8;
+  --color-success: #34d399;
+  --color-danger: #fb7185;
+  --color-warning: #fbbf24;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    @apply m-0 min-h-svh bg-surface-0 text-zinc-200 font-sans;
+    background-image:
+      radial-gradient(1200px 600px at 10% -10%, rgba(124, 92, 255, 0.22), transparent),
+      radial-gradient(900px 500px at 90% 0%, rgba(56, 189, 248, 0.12), transparent),
+      radial-gradient(800px 400px at 50% 120%, rgba(124, 92, 255, 0.08), transparent);
+    background-attachment: fixed;
+  }
+
+  #root {
+    @apply min-h-svh;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply border border-white/10 bg-white/5 shadow-[0_8px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl;
+  }
+
+  .glow-ring {
+    box-shadow:
+      0 0 0 1px rgba(124, 92, 255, 0.35),
+      0 0 60px rgba(124, 92, 255, 0.12);
+  }
+}
