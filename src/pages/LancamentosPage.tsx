@@ -1,7 +1,9 @@
 import type { SqlValue } from 'sql.js'
 import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
-import { colorForCategoryId } from '../components/DonutChart'
+import { Link } from 'react-router-dom'
+import { colorForCategoryId, type DonutSlice } from '../components/DonutChart'
+import { AccountSpendColumn, DistributionDonutCard } from '../components/MonthInsightsPanels'
 import { useFinanceDb } from '../context/useFinanceDb'
 import { queryAll, run } from '../lib/db/query'
 import {
@@ -13,6 +15,11 @@ import { useMaskedMoney } from '../context/AmountVisibilityContext'
 import { formatBRL } from '../lib/money'
 import { SQL_EFFECTIVE_SPEND_MONTH } from '../lib/queries/effectiveSpendMonth'
 import { listInvestments, type Investment } from '../lib/queries/investments'
+import {
+  getMonthAccountSpend,
+  getMonthCategorySpend,
+  getPeriodSummary,
+} from '../lib/queries/categorySpend'
 import { ymNow } from '../lib/queries/spendSummary'
 
 function monthChoices(): { value: string; label: string }[] {
@@ -45,8 +52,11 @@ const UNCAT_FILTER_VALUE = '__uncat__'
 export function LancamentosPage() {
   const { brl } = useMaskedMoney()
   const { getDb, touch, persistSoon, version } = useFinanceDb()
-  const [accountId, setAccountId] = useState('')
+  /** Vazio = todas as contas. */
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([])
   const [monthYm, setMonthYm] = useState(ymNow())
+  /** Resumo do mês (gráficos): começa recolhido. */
+  const [resumoMesOpen, setResumoMesOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [groupMode, setGroupMode] = useState<GroupMode>('category')
@@ -72,9 +82,10 @@ export function LancamentosPage() {
     const db = getDb()
     const params: SqlValue[] = []
     const parts = ['a.deleted_at IS NULL']
-    if (accountId) {
-      parts.push('t.account_id = ?')
-      params.push(accountId)
+    if (selectedAccountIds.length > 0) {
+      const ph = selectedAccountIds.map(() => '?').join(', ')
+      parts.push(`t.account_id IN (${ph})`)
+      params.push(...selectedAccountIds)
     }
     if (monthYm) {
       parts.push(`(${SQL_EFFECTIVE_SPEND_MONTH}) = ?`)
@@ -124,7 +135,33 @@ export function LancamentosPage() {
     }
     return { rows: list, spendCents: spend, incomeCents: income }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getDb, version, accountId, monthYm, search, categoryFilter])
+  }, [getDb, version, selectedAccountIds, monthYm, search, categoryFilter])
+
+  const accountFilterForInsights =
+    selectedAccountIds.length > 0 ? selectedAccountIds : undefined
+
+  const monthInsights = useMemo(() => {
+    if (!monthYm) return null
+    const db = getDb()
+    const summary = getPeriodSummary(db, monthYm, accountFilterForInsights)
+    const catRows = getMonthCategorySpend(db, monthYm, accountFilterForInsights)
+    const accRows = getMonthAccountSpend(db, monthYm, accountFilterForInsights)
+    return { summary, catRows, accRows }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getDb, version, monthYm, accountFilterForInsights])
+
+  const insightDonutSlices: DonutSlice[] = useMemo(() => {
+    if (!monthInsights) return []
+    return monthInsights.catRows
+      .filter((r) => r.totalCents > 0)
+      .slice(0, 12)
+      .map((r, i) => ({
+        id: r.categoryId ?? `uncat-${i}`,
+        label: r.categoryName,
+        value: r.totalCents,
+        color: colorForCategoryId(r.categoryId),
+      }))
+  }, [monthInsights])
 
   const onCategoryChange = (txId: string, value: string) => {
     const db = getDb()
@@ -230,22 +267,57 @@ export function LancamentosPage() {
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass flex flex-wrap items-end gap-4 rounded-2xl p-5"
+        className="glass relative z-40 isolate flex flex-wrap items-end gap-4 rounded-2xl p-5"
       >
-        <div className="min-w-[160px] flex-1">
-          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">Conta</label>
-          <select
-            value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/10 bg-surface-1 px-3 py-2.5 text-sm text-white outline-none ring-accent/30 focus:ring-2"
-          >
-            <option value="">Todas</option>
-            {accounts.map((a) => (
-              <option key={String(a.id)} value={String(a.id)}>
-                {String(a.name)} ({String(a.kind)})
-              </option>
-            ))}
-          </select>
+        <div className="relative z-50 min-w-[200px] flex-1">
+          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">Contas</label>
+          <details className="group mt-2">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl border border-white/10 bg-surface-1 px-3 py-2.5 text-sm text-white outline-none ring-accent/30 focus:ring-2 marker:hidden [&::-webkit-details-marker]:hidden">
+              <span className="truncate">
+                {selectedAccountIds.length === 0
+                  ? 'Todas'
+                  : `${selectedAccountIds.length} selecionada${selectedAccountIds.length === 1 ? '' : 's'}`}
+              </span>
+              <span className="text-zinc-500">▾</span>
+            </summary>
+            <div className="absolute left-0 right-0 top-full z-[200] mt-1 max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-surface-1 p-2 shadow-xl">
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm text-zinc-200 hover:bg-white/5">
+                <input
+                  type="checkbox"
+                  className="rounded border-white/20 bg-surface-0 text-accent focus:ring-accent/40"
+                  checked={selectedAccountIds.length === 0}
+                  onChange={() => setSelectedAccountIds([])}
+                />
+                Todas
+              </label>
+              <div className="my-1 border-t border-white/10" />
+              {accounts.map((a) => {
+                const id = String(a.id)
+                const on = selectedAccountIds.includes(id)
+                return (
+                  <label
+                    key={id}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm text-zinc-200 hover:bg-white/5"
+                  >
+                    <input
+                      type="checkbox"
+                      className="rounded border-white/20 bg-surface-0 text-accent focus:ring-accent/40"
+                      checked={on}
+                      onChange={() => {
+                        setSelectedAccountIds((prev) =>
+                          on ? prev.filter((x) => x !== id) : [...prev, id],
+                        )
+                      }}
+                    />
+                    <span className="min-w-0 truncate" title={String(a.name)}>
+                      {String(a.name)}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-zinc-500">({String(a.kind)})</span>
+                  </label>
+                )
+              })}
+            </div>
+          </details>
         </div>
         <div className="min-w-[200px]">
           <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">Mês (referência ou data)</label>
@@ -317,7 +389,7 @@ export function LancamentosPage() {
         </div>
       </motion.div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="relative z-0 grid gap-3 sm:grid-cols-3">
         <div className="glass rounded-xl px-4 py-3">
           <p className="text-xs uppercase tracking-wide text-zinc-500">Saídas no filtro</p>
           <p className="mt-1 text-xl font-semibold text-rose-200">{brl(spendCents)}</p>
@@ -337,6 +409,50 @@ export function LancamentosPage() {
           </p>
         </div>
       </div>
+
+      {monthYm && monthInsights ? (
+        <details
+          open={resumoMesOpen}
+          onToggle={(e) => setResumoMesOpen(e.currentTarget.open)}
+          className="glass relative z-0 overflow-hidden rounded-2xl border border-white/5"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 marker:hidden [&::-webkit-details-marker]:hidden hover:bg-white/[0.03]">
+            <span className="text-xs font-medium uppercase tracking-wide text-zinc-400">
+              Resumo do mês (categorias e contas)
+            </span>
+            <span className="shrink-0 text-[11px] text-zinc-500">
+              {resumoMesOpen ? 'recolher' : 'expandir'}
+            </span>
+          </summary>
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.02 }}
+            className="space-y-2 border-t border-white/10 px-4 pb-4 pt-3"
+          >
+            <div className="flex min-w-0 flex-col gap-4 min-[400px]:flex-row min-[400px]:items-stretch">
+              <AccountSpendColumn
+                rows={monthInsights.accRows}
+                periodTotalCents={monthInsights.summary.totalCents}
+                className="min-w-0 flex-1 basis-0"
+              />
+              <DistributionDonutCard
+                donutSlices={insightDonutSlices}
+                summary={monthInsights.summary}
+                className="min-w-0 flex-1 basis-0"
+              />
+            </div>
+            <p className="text-[11px] leading-relaxed text-zinc-500">
+              Mesma base da tela{' '}
+              <Link to="/por-categoria" className="text-accent-2 hover:underline">
+                Por categoria
+              </Link>{' '}
+              (<code className="text-zinc-400">v_tx_plus_future</code>, sem transferências entre contas).
+              Respeita o filtro de contas acima.
+            </p>
+          </motion.div>
+        </details>
+      ) : null}
 
       <div className="glass overflow-hidden rounded-2xl">
         <div className="max-h-[min(70vh,720px)] overflow-auto">

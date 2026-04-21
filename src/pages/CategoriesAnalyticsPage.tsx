@@ -2,15 +2,18 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CategoryHeatmap } from '../components/CategoryHeatmap'
-import { DonutChart, colorForCategoryId, type DonutSlice } from '../components/DonutChart'
+import { DistributionDonutCard, AccountSpendColumn } from '../components/MonthInsightsPanels'
+import { colorForCategoryId, type DonutSlice } from '../components/DonutChart'
 import { useMaskedMoney } from '../context/AmountVisibilityContext'
 import { useFinanceDb } from '../context/useFinanceDb'
 import {
   getCategoryTransactionsInPeriod,
+  getMonthAccountSpend,
   getMonthCategorySpend,
   getPeriodSummary,
   getYearCategoryMatrix,
   listYearsWithRecords,
+  type AccountSpendRow,
   type CategorySpendRow,
   type CategorySpendTransaction,
   type PeriodSummary,
@@ -471,11 +474,12 @@ export function CategoriesAnalyticsPage() {
     if (mode === 'year') {
       const rows = getYearCategoryMatrix(db, year)
       const summary = getPeriodSummary(db, String(year))
-      return { rows, summary }
+      return { rows, summary, accounts: [] as AccountSpendRow[] }
     }
     const rows = getMonthCategorySpend(db, monthYm)
     const summary = getPeriodSummary(db, monthYm)
-    return { rows, summary }
+    const accounts = getMonthAccountSpend(db, monthYm)
+    return { rows, summary, accounts }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- version invalida leituras após mutações no SQLite
   }, [getDb, version, mode, year, monthYm])
 
@@ -559,18 +563,18 @@ export function CategoriesAnalyticsPage() {
       <motion.div
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass flex flex-wrap items-end gap-4 rounded-2xl p-5"
+        className="glass flex flex-wrap items-start gap-4 rounded-2xl p-5"
       >
-        <div>
+        <div className="min-w-[140px]">
           <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">
             Período
           </label>
-          <div className="mt-2 inline-flex overflow-hidden rounded-xl border border-white/10 bg-surface-1">
+          <div className="mt-2 flex w-full overflow-hidden rounded-xl border border-white/10 bg-surface-1">
             <button
               type="button"
               onClick={() => setMode('year')}
               className={[
-                'px-4 py-2 text-xs font-medium transition',
+                'min-w-0 flex-1 px-3 py-2.5 text-xs font-medium transition sm:px-4',
                 mode === 'year'
                   ? 'bg-accent/15 text-accent-2'
                   : 'text-zinc-400 hover:text-zinc-200',
@@ -582,7 +586,7 @@ export function CategoriesAnalyticsPage() {
               type="button"
               onClick={() => setMode('month')}
               className={[
-                'border-l border-white/10 px-4 py-2 text-xs font-medium transition',
+                'min-w-0 flex-1 border-l border-white/10 px-3 py-2.5 text-xs font-medium transition sm:px-4',
                 mode === 'month'
                   ? 'bg-accent/15 text-accent-2'
                   : 'text-zinc-400 hover:text-zinc-200',
@@ -677,27 +681,29 @@ export function CategoriesAnalyticsPage() {
         </section>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-[auto,1fr]">
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass flex flex-col items-center gap-3 rounded-2xl p-6"
-        >
-          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-            Distribuição no período
-          </p>
-          <DonutChart
-            slices={donutSlices}
-            size={220}
-            strokeWidth={24}
-            centerLabel={brl(data.summary.totalCents)}
-            centerSub={`${data.summary.categoriesWithSpend} categoria${data.summary.categoriesWithSpend === 1 ? '' : 's'}`}
-            emptyMessage="Sem gastos no período"
-          />
-          <p className="max-w-[220px] text-center text-[11px] text-zinc-500">
-            Top 12 categorias. Cores iguais em outras telas.
-          </p>
-        </motion.div>
+      <section
+        className={
+          mode === 'month'
+            ? 'flex flex-col gap-4'
+            : 'grid gap-4 lg:grid-cols-[auto,1fr]'
+        }
+      >
+        {mode === 'month' ? (
+          <div className="flex min-w-0 flex-col gap-4 min-[400px]:flex-row min-[400px]:items-stretch">
+            <DistributionDonutCard
+              donutSlices={donutSlices}
+              summary={data.summary}
+              className="min-w-0 flex-1 basis-0"
+            />
+            <AccountSpendColumn
+              rows={data.accounts}
+              periodTotalCents={data.summary.totalCents}
+              className="min-w-0 flex-1 basis-0"
+            />
+          </div>
+        ) : (
+          <DistributionDonutCard donutSlices={donutSlices} summary={data.summary} />
+        )}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}

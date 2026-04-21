@@ -2,6 +2,13 @@ import type { Database, SqlValue } from 'sql.js'
 import { queryAll, queryOne } from '../db/query'
 import { SQL_EFFECTIVE_SPEND_MONTH } from './effectiveSpendMonth'
 
+/** `AND t.account_id IN (…)` quando `ids` não vazio; caso contrário string vazia. */
+function accountIdClause(ids: string[] | undefined): { clause: string; params: SqlValue[] } {
+  if (!ids?.length) return { clause: '', params: [] }
+  const qs = ids.map(() => '?').join(', ')
+  return { clause: ` AND t.account_id IN (${qs})`, params: [...ids] as SqlValue[] }
+}
+
 /**
  * Análise de gastos por categoria em um período (ano ou mês).
  *
@@ -35,6 +42,22 @@ export type CategorySpendTransaction = {
   accountKind: string
   categoryId: string | null
   categoryName: string | null
+}
+
+/** Gasto agregado por conta em um único mês (mesmas regras que getMonthCategorySpend). */
+export type AccountSpendRow = {
+  accountId: string
+  accountName: string
+  accountKind: string
+  /** Realizado: `source != 'scheduled'` (já lançado). */
+  realCents: number
+  /** Futuro: `source = 'scheduled'` (agendado / previsto no mês). */
+  futureCents: number
+  /** Real + futuro (mesma soma do ranking por categoria). */
+  totalCents: number
+  count: number
+  realCount: number
+  futureCount: number
 }
 
 export type PeriodSummary = {
@@ -146,8 +169,13 @@ export function getYearCategoryMatrix(db: Database, year: number): CategorySpend
   return Array.from(byCat.values()).sort((a, b) => b.totalCents - a.totalCents)
 }
 
-/** Gasto por categoria em um único mês (YYYY-MM). */
-export function getMonthCategorySpend(db: Database, ym: string): CategorySpendRow[] {
+/** Gasto por categoria em um único mês (YYYY-MM). Opcionalmente restringe a contas. */
+export function getMonthCategorySpend(
+  db: Database,
+  ym: string,
+  accountIds?: string[],
+): CategorySpendRow[] {
+  const af = accountIdClause(accountIds)
   const rows = queryAll(
     db,
     `
@@ -163,10 +191,11 @@ export function getMonthCategorySpend(db: Database, ym: string): CategorySpendRo
     WHERE (${SQL_EFFECTIVE_SPEND_MONTH}) = ?
       AND t.amount_cents < 0
       AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
+      ${af.clause}
     GROUP BY t.category_id
     ORDER BY spend_cents DESC
     `,
-    [ym],
+    [ym, ...af.params],
   )
   return rows.map((r) => ({
     categoryId: r.category_id ? String(r.category_id) : null,
@@ -179,16 +208,63 @@ export function getMonthCategorySpend(db: Database, ym: string): CategorySpendRo
   }))
 }
 
+/** Gasto por conta registrada em um único mês (YYYY-MM), ordenado do maior total para o menor. */
+export function getMonthAccountSpend(db: Database, ym: string, accountIds?: string[]): AccountSpendRow[] {
+  const af = accountIdClause(accountIds)
+  const rows = queryAll(
+    db,
+    `
+    SELECT
+      a.id AS account_id,
+      a.name AS account_name,
+      a.kind AS account_kind,
+      COALESCE(SUM(-t.amount_cents), 0) AS total_cents,
+      COALESCE(SUM(CASE WHEN t.source != 'scheduled' THEN -t.amount_cents ELSE 0 END), 0) AS real_cents,
+      COALESCE(SUM(CASE WHEN t.source = 'scheduled' THEN -t.amount_cents ELSE 0 END), 0) AS future_cents,
+      COUNT(*) AS cnt,
+      SUM(CASE WHEN t.source != 'scheduled' THEN 1 ELSE 0 END) AS real_cnt,
+      SUM(CASE WHEN t.source = 'scheduled' THEN 1 ELSE 0 END) AS future_cnt
+    FROM v_tx_plus_future t
+    JOIN accounts a ON a.id = t.account_id AND a.deleted_at IS NULL
+    LEFT JOIN categories c ON c.id = t.category_id
+    WHERE (${SQL_EFFECTIVE_SPEND_MONTH}) = ?
+      AND t.amount_cents < 0
+      AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
+      ${af.clause}
+    GROUP BY t.account_id
+    ORDER BY total_cents DESC
+    `,
+    [ym, ...af.params],
+  )
+  return rows.map((r) => ({
+    accountId: String(r.account_id ?? ''),
+    accountName: String(r.account_name ?? 'Conta'),
+    accountKind: String(r.account_kind ?? 'other'),
+    realCents: Number(r.real_cents ?? 0),
+    futureCents: Number(r.future_cents ?? 0),
+    totalCents: Number(r.total_cents ?? 0),
+    count: Number(r.cnt ?? 0),
+    realCount: Number(r.real_cnt ?? 0),
+    futureCount: Number(r.future_cnt ?? 0),
+  }))
+}
+
 /**
  * Retorna o sumário do período. `periodPattern` aceita tanto `YYYY` (ano, usa `LIKE`) quanto
  * `YYYY-MM` (um mês, usa `=`).
  */
-export function getPeriodSummary(db: Database, periodPattern: string): PeriodSummary {
+export function getPeriodSummary(
+  db: Database,
+  periodPattern: string,
+  accountIds?: string[],
+): PeriodSummary {
   const isMonth = /^\d{4}-\d{2}$/.test(periodPattern)
   const whereFrag = isMonth
     ? `(${SQL_EFFECTIVE_SPEND_MONTH}) = ?`
     : `(${SQL_EFFECTIVE_SPEND_MONTH}) LIKE ?`
   const param: SqlValue = isMonth ? periodPattern : `${periodPattern}-%`
+  const af = accountIdClause(accountIds)
+  const baseParams: SqlValue[] = [param, ...af.params]
   // Totais do período incluindo futuros no total geral, mas segregando o split
   // Cartão/Contas (reais) de Gastos futuros (scheduled). Dessa forma os cards
   // somam corretamente (credit + account + future = total) e o ranking/heatmap
@@ -211,8 +287,9 @@ export function getPeriodSummary(db: Database, periodPattern: string): PeriodSum
     WHERE ${whereFrag}
       AND t.amount_cents < 0
       AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
+      ${af.clause}
     `,
-    [param],
+    baseParams,
   )
   // Maior categoria considera tudo que aparece no ranking (real + futuros).
   const topRow = queryOne(
@@ -225,11 +302,12 @@ export function getPeriodSummary(db: Database, periodPattern: string): PeriodSum
     WHERE ${whereFrag}
       AND t.amount_cents < 0
       AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
+      ${af.clause}
     GROUP BY t.category_id
     ORDER BY cents DESC
     LIMIT 1
     `,
-    [param],
+    baseParams,
   )
   // Futuros (só gasto) + receita real no mesmo período.
   const extraRow = queryOne(
@@ -247,8 +325,9 @@ export function getPeriodSummary(db: Database, periodPattern: string): PeriodSum
     LEFT JOIN categories c ON c.id = t.category_id
     WHERE ${whereFrag}
       AND (c.kind IS NULL OR c.kind NOT IN ('transfer','investment_in','investment_out'))
+      ${af.clause}
     `,
-    [param],
+    baseParams,
   )
   const total = Number(totalRow?.total_cents ?? 0)
   const monthsWithData = Math.max(1, Number(totalRow?.months_with_data ?? 1))

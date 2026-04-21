@@ -15,10 +15,111 @@ const SIDEBAR_STORAGE_KEY = 'mf-sidebar-collapsed';
 /** Micro-interação tipo React Bits / Framer Motion: leve, sem exagerar no movimento. */
 const socialLinkTransition = { type: 'spring' as const, stiffness: 420, damping: 30 }
 
+/** Ícone 20×20 para menu recolhido (stroke). */
+function NavRouteIcon({ to }: { to: string }) {
+  const cn = 'size-5 shrink-0 text-current opacity-90'
+  switch (to) {
+    case '/':
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          <polyline points="9 22 9 12 15 12 15 22" />
+        </svg>
+      )
+    case '/por-categoria':
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+          <path d="M22 12A10 10 0 0 0 12 2v10z" />
+        </svg>
+      )
+    case '/lancamentos':
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <line x1="8" x2="21" y1="6" y2="6" />
+          <line x1="8" x2="21" y1="12" y2="12" />
+          <line x1="8" x2="21" y1="18" y2="18" />
+          <line x1="3" x2="3.01" y1="6" y2="6" />
+          <line x1="3" x2="3.01" y1="12" y2="12" />
+          <line x1="3" x2="3.01" y1="18" y2="18" />
+        </svg>
+      )
+    case '/categorizar':
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z" />
+          <path d="M7 7h.01" />
+        </svg>
+      )
+    case '/agenda':
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+          <line x1="16" x2="16" y1="2" y2="6" />
+          <line x1="8" x2="8" y1="2" y2="6" />
+          <line x1="3" x2="21" y1="10" y2="10" />
+        </svg>
+      )
+    case '/investimentos':
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+          <polyline points="16 7 22 7 22 13" />
+        </svg>
+      )
+    case '/categorias':
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+      )
+    case '/contas':
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <rect width="20" height="14" x="2" y="5" rx="2" />
+          <line x1="2" x2="22" y1="10" y2="10" />
+        </svg>
+      )
+    case '/sincronizar':
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+          <path d="M12 12v9" />
+          <path d="m16 16-4-4-4 4" />
+        </svg>
+      )
+    case '/importacoes':
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <path d="M14 2v6h6" />
+          <path d="M12 18v-6" />
+          <path d="m9 15 3 3 3-3" />
+        </svg>
+      )
+    case '/config-ia':
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+          <path d="M20 3v4" />
+          <path d="M22 5h-4" />
+          <path d="M4 17v2" />
+          <path d="M5 18H3" />
+        </svg>
+      )
+    default:
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+          <circle cx="12" cy="12" r="10" />
+        </svg>
+      )
+  }
+}
+
 type NavItem = {
   to: string;
   label: string;
-  /** Duas letras no menu recolhido (desktop). */
+  /** Duas letras — fallback se ícone não existir. */
   abbr: string;
   /** Quando presente, exibe uma bolinha vermelha com o número. Ocultado se for 0. */
   badge?: number;
@@ -147,74 +248,115 @@ export function AppShell() {
           'glass flex shrink-0 flex-col gap-4 rounded-2xl p-4 transition-[width,padding] duration-200 ease-out',
           'w-full',
           sidebarCollapsed
-            ? 'md:w-[4.25rem] md:overflow-hidden md:p-2'
-            : 'md:w-56',
+            ? 'md:w-[4.75rem] md:overflow-visible md:p-3 md:pt-3.5'
+            : 'md:w-56 md:overflow-visible',
         ].join(' ')}
       >
         <div
           className={[
-            'flex items-start justify-between gap-2 px-2',
-            sidebarCollapsed ? 'md:justify-center' : '',
+            'flex w-full min-w-0 shrink-0 items-center gap-2 px-0.5 sm:px-1',
+            sidebarCollapsed ? 'md:justify-center' : 'justify-between',
           ].join(' ')}
         >
           <div
-            className={sidebarCollapsed ? 'max-md:block md:hidden' : 'block'}
-          >
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-2">
-              Local
-            </p>
-            <p className="mt-1 text-lg font-semibold text-white">My Finance</p>
-          </div>
-          <button
-            type="button"
-            onClick={toggleAmounts}
-            className="shrink-0 rounded-lg border border-white/10 bg-white/5 p-2 text-zinc-300 transition hover:bg-white/10 hover:text-white"
-            title={amountsVisible ? 'Ocultar valores monetários' : 'Mostrar valores monetários'}
-            aria-pressed={amountsVisible}
-            aria-label={amountsVisible ? 'Ocultar valores' : 'Mostrar valores'}
-          >
-            {amountsVisible ? (
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
-                <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
-                <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
-                <line x1="2" x2="22" y1="2" y2="22" />
-              </svg>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setSidebarCollapsed(c => !c)}
-            className="hidden shrink-0 rounded-lg border border-white/10 bg-white/5 p-2 text-zinc-300 transition hover:bg-white/10 hover:text-white md:inline-flex"
-            title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
-            aria-expanded={!sidebarCollapsed}
-            aria-label={
-              sidebarCollapsed
-                ? 'Expandir menu lateral'
-                : 'Recolher menu lateral'
+            className={
+              sidebarCollapsed ? 'max-md:block min-w-0 md:hidden' : 'min-w-0'
             }
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-              className={sidebarCollapsed ? 'rotate-180' : ''}
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-2">
+              Project
+            </p>
+            <p className="mt-1 text-lg font-semibold leading-tight text-white">
+              My Finance
+            </p>
+          </div>
+          <div
+            className={[
+              'flex shrink-0 items-center gap-1.5',
+              sidebarCollapsed
+                ? 'md:flex-col md:items-center md:gap-1.5'
+                : '',
+            ].join(' ')}
+          >
+            <button
+              type="button"
+              onClick={toggleAmounts}
+              className="shrink-0 rounded-lg border border-white/10 bg-white/5 p-2 text-zinc-300 transition hover:bg-white/10 hover:text-white"
+              title={
+                amountsVisible
+                  ? 'Ocultar valores monetários'
+                  : 'Mostrar valores monetários'
+              }
+              aria-pressed={amountsVisible}
+              aria-label={
+                amountsVisible ? 'Ocultar valores' : 'Mostrar valores'
+              }
             >
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-          </button>
+              {amountsVisible ? (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+                  <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+                  <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                  <line x1="2" x2="22" y1="2" y2="22" />
+                </svg>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(c => !c)}
+              className="hidden shrink-0 rounded-lg border border-white/10 bg-white/5 p-2 text-zinc-300 transition hover:bg-white/10 hover:text-white md:inline-flex"
+              title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+              aria-expanded={!sidebarCollapsed}
+              aria-label={
+                sidebarCollapsed
+                  ? 'Expandir menu lateral'
+                  : 'Recolher menu lateral'
+              }
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                className={sidebarCollapsed ? 'rotate-180' : ''}
+              >
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+          </div>
         </div>
         <nav className="flex flex-col gap-1">
           {nav.map(item => {
@@ -227,32 +369,30 @@ export function AppShell() {
                 title={item.label}
                 className={({ isActive }) =>
                   [
-                    'relative flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm font-medium transition',
+                    'relative flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition',
+                    sidebarCollapsed
+                      ? 'md:justify-center md:px-2'
+                      : '',
                     isActive
                       ? 'bg-white/10 text-white shadow-inner'
                       : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-100',
-                    sidebarCollapsed ? 'md:justify-center md:px-2' : '',
                   ].join(' ')
                 }
               >
                 <span
-                  className={
-                    sidebarCollapsed
-                      ? 'max-md:inline md:sr-only'
-                      : 'min-w-0 truncate'
-                  }
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-current"
+                  aria-hidden="true"
                 >
-                  {item.label}
+                  <NavRouteIcon to={item.to} />
                 </span>
                 <span
                   className={
                     sidebarCollapsed
-                      ? 'hidden h-9 w-9 items-center justify-center rounded-lg text-xs font-semibold tracking-tight md:flex'
-                      : 'hidden'
+                      ? 'max-md:inline min-w-0 md:sr-only'
+                      : 'min-w-0 flex-1 truncate'
                   }
-                  aria-hidden="true"
                 >
-                  {item.abbr}
+                  {item.label}
                 </span>
                 {showBadge ? (
                   <span
