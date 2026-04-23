@@ -351,3 +351,21 @@ export function getYearRecords(db: Database, year: number): YearRecords {
     monthsCovered: months.length,
   }
 }
+
+/**
+ * Saldo líquido em contas corrente + carteira: Σ (lançamentos + offset de calibração).
+ * O offset é ajustado na tela Contas para bater com o extrato; novos lançamentos
+ * nessas contas atualizam o total automaticamente. Cartão de crédito não entra.
+ */
+export function getLiquidityRealBalanceCents(db: Database): number {
+  const row = queryOne(
+    db,
+    `SELECT COALESCE(SUM(
+         COALESCE((SELECT SUM(amount_cents) FROM transactions WHERE account_id = a.id), 0)
+         + a.real_balance_offset_cents
+       ), 0) AS total
+     FROM accounts a
+     WHERE a.deleted_at IS NULL AND a.kind IN ('checking', 'wallet')`,
+  )
+  return Number(row?.total ?? 0)
+}

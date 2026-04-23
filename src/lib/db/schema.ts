@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   kind TEXT NOT NULL CHECK(kind IN ('checking','credit','wallet','other')),
   color TEXT,
   invoice_close_day INTEGER,
+  real_balance_offset_cents INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   deleted_at TEXT
 );

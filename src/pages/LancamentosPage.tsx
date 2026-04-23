@@ -1,6 +1,6 @@
 import type { SqlValue } from 'sql.js'
 import { motion } from 'framer-motion'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { colorForCategoryId, type DonutSlice } from '../components/DonutChart'
 import { AccountSpendColumn, DistributionDonutCard } from '../components/MonthInsightsPanels'
@@ -12,7 +12,7 @@ import {
   type DescriptionIndex,
 } from '../lib/learning/descriptionIndex'
 import { useMaskedMoney } from '../context/AmountVisibilityContext'
-import { formatBRL } from '../lib/money'
+import { formatBRL, parseBRLToCents } from '../lib/money'
 import { SQL_EFFECTIVE_SPEND_MONTH } from '../lib/queries/effectiveSpendMonth'
 import { listInvestments, type Investment } from '../lib/queries/investments'
 import {
@@ -41,6 +41,14 @@ function billingRefEditOptions(): { value: string; label: string }[] {
 
 function sanitizeSearch(s: string): string {
   return s.trim().replace(/[%_\\]/g, ' ')
+}
+
+/** Valor absoluto em pt-BR para campo de edição (sem R$). */
+function centsToBRLInput(cents: number): string {
+  return (Math.abs(cents) / 100).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
 type GroupMode = 'date' | 'category'
@@ -193,6 +201,13 @@ export function LancamentosPage() {
   const onBillingRefChange = (txId: string, value: string) => {
     const db = getDb()
     run(db, 'UPDATE transactions SET billing_ref_ym = ? WHERE id = ?', [value || null, txId])
+    touch()
+    persistSoon()
+  }
+
+  const onAmountChange = (txId: string, amountCents: number) => {
+    const db = getDb()
+    run(db, 'UPDATE transactions SET amount_cents = ? WHERE id = ?', [amountCents, txId])
     touch()
     persistSoon()
   }
@@ -466,7 +481,7 @@ export function LancamentosPage() {
                   Valor
                 </th>
                 <th className="min-w-[240px] px-4 py-3 font-medium">Categoria</th>
-                <th className="w-12 whitespace-nowrap px-2 py-3 text-center font-medium">
+                <th className="w-[88px] whitespace-nowrap px-2 py-3 text-center font-medium">
                   Ações
                 </th>
               </tr>
@@ -523,6 +538,7 @@ export function LancamentosPage() {
                         onCategoryChange={onCategoryChange}
                         onBillingRefChange={onBillingRefChange}
                         onInvestmentChange={onInvestmentChange}
+                        onAmountChange={onAmountChange}
                         onDelete={onDelete}
                       />
                     )),
@@ -541,6 +557,7 @@ export function LancamentosPage() {
                     onCategoryChange={onCategoryChange}
                     onBillingRefChange={onBillingRefChange}
                     onInvestmentChange={onInvestmentChange}
+                    onAmountChange={onAmountChange}
                     onDelete={onDelete}
                   />
                 ))
@@ -566,6 +583,7 @@ type LancamentoRowProps = {
   onCategoryChange: (txId: string, value: string) => void
   onBillingRefChange: (txId: string, value: string) => void
   onInvestmentChange: (txId: string, value: string) => void
+  onAmountChange: (txId: string, amountCents: number) => void
   onDelete: (txId: string, description: string, amountCents: number) => void
 }
 
@@ -579,11 +597,41 @@ function LancamentoRow({
   onCategoryChange,
   onBillingRefChange,
   onInvestmentChange,
+  onAmountChange,
   onDelete,
 }: LancamentoRowProps) {
   const { brl } = useMaskedMoney()
   const amt = Number(r.amount_cents)
   const neg = amt < 0
+  const [editingAmount, setEditingAmount] = useState(false)
+  const [draftAmount, setDraftAmount] = useState('')
+
+  const startEditAmount = () => {
+    setDraftAmount(`${neg ? '-' : ''}${centsToBRLInput(amt)}`)
+    setEditingAmount(true)
+  }
+
+  const commitAmount = () => {
+    const parsed = parseBRLToCents(draftAmount)
+    if (parsed === null) {
+      setEditingAmount(false)
+      return
+    }
+    if (parsed !== amt) {
+      onAmountChange(String(r.id), parsed)
+    }
+    setEditingAmount(false)
+  }
+
+  const onAmountKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      commitAmount()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setEditingAmount(false)
+    }
+  }
   const rowColor = colorForCategoryId(r.category_id ? String(r.category_id) : null)
   const isUncat = !r.category_id
   const categoryKind = r.category_kind ? String(r.category_kind) : ''
@@ -638,11 +686,28 @@ function LancamentoRow({
         </span>
       </td>
       <td
-        className={`whitespace-nowrap px-4 py-2.5 text-right font-medium tabular-nums ${
+        className={`px-4 py-2 text-right font-medium tabular-nums ${
           neg ? 'text-rose-200' : 'text-emerald-200'
         }`}
       >
-        {brl(amt)}
+        {editingAmount ? (
+          <input
+            value={draftAmount}
+            onChange={(e) => setDraftAmount(e.target.value)}
+            onBlur={(e) => {
+              const next = e.relatedTarget as HTMLElement | null
+              if (next?.closest?.('[data-lancamento-actions]')) return
+              commitAmount()
+            }}
+            onKeyDown={onAmountKeyDown}
+            autoFocus
+            inputMode="decimal"
+            title="Valor em reais (use − para despesa, se quiser trocar o sinal)"
+            className="w-full min-w-[7rem] rounded-lg border border-white/15 bg-surface-1 px-2 py-1.5 text-right text-sm text-white outline-none ring-accent/30 focus:ring-1"
+          />
+        ) : (
+          <span className="inline-block whitespace-nowrap py-0.5">{brl(amt)}</span>
+        )}
       </td>
       <td className="min-w-0 px-4 py-2 align-top">
         <div className="flex flex-col gap-1">
@@ -719,39 +784,72 @@ function LancamentoRow({
           ) : null}
         </div>
       </td>
-      <td className="w-12 px-1 py-2 text-center align-top">
-        <button
-          type="button"
-          onClick={() =>
-            onDelete(
-              String(r.id),
-              String(r.description ?? ''),
-              Number(r.amount_cents),
-            )
-          }
-          aria-label="Excluir lançamento"
-          title="Excluir lançamento"
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/5 bg-transparent text-zinc-500 transition hover:border-rose-400/30 hover:bg-rose-500/10 hover:text-rose-200"
+      <td className="w-[88px] px-1 py-2 text-center align-top">
+        <div
+          className="flex items-center justify-center gap-0.5"
+          data-lancamento-actions
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
+          <button
+            type="button"
+            onClick={() => (editingAmount ? commitAmount() : startEditAmount())}
+            aria-label={editingAmount ? 'Salvar valor' : 'Editar valor'}
+            title={editingAmount ? 'Salvar valor (Enter ou clique)' : 'Editar valor'}
+            className={[
+              'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-transparent transition',
+              editingAmount
+                ? 'border-accent/40 text-accent-2 hover:bg-accent/10'
+                : 'border-white/5 text-zinc-500 hover:border-white/20 hover:bg-white/[0.06] hover:text-zinc-200',
+            ].join(' ')}
           >
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-            <path d="M10 11v6" />
-            <path d="M14 11v6" />
-            <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
-          </svg>
-        </button>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              onDelete(
+                String(r.id),
+                String(r.description ?? ''),
+                Number(r.amount_cents),
+              )
+            }
+            aria-label="Excluir lançamento"
+            title="Excluir lançamento"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/5 bg-transparent text-zinc-500 transition hover:border-rose-400/30 hover:bg-rose-500/10 hover:text-rose-200"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+              <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+            </svg>
+          </button>
+        </div>
       </td>
     </motion.tr>
   )

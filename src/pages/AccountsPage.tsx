@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
-import { type FormEvent, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { useFinanceDb } from '../context/useFinanceDb'
+import { useMaskedMoney } from '../context/AmountVisibilityContext'
 import { queryAll, run } from '../lib/db/query'
 import { newId } from '../lib/id'
 import { normalizeInstitutionKey } from '../lib/drive/driveApi'
@@ -14,6 +15,74 @@ const KINDS = [
 ] as const
 
 const SUGGESTED_KEYS = ['nubank', 'mercado-pago', 'banco-do-brasil', 'santander', 'itau', 'bradesco', 'inter', 'c6']
+
+function centsToBRLInput(cents: number): string {
+  return (Math.abs(cents) / 100).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function AccountLiquidityBalanceEditor({
+  accountId,
+  txSumCents,
+  offsetCents,
+  dbVersion,
+}: {
+  accountId: string
+  txSumCents: number
+  offsetCents: number
+  dbVersion: number
+}) {
+  const { brlSigned } = useMaskedMoney()
+  const { getDb, touch, persistSoon } = useFinanceDb()
+  const effective = txSumCents + offsetCents
+  const [draft, setDraft] = useState(() => `${effective < 0 ? '-' : ''}${centsToBRLInput(effective)}`)
+
+  useEffect(() => {
+    const eff = txSumCents + offsetCents
+    setDraft(`${eff < 0 ? '-' : ''}${centsToBRLInput(eff)}`)
+  }, [txSumCents, offsetCents, dbVersion])
+
+  const commit = () => {
+    const parsed = parseBRLToCents(draft)
+    if (parsed === null) {
+      setDraft(`${effective < 0 ? '-' : ''}${centsToBRLInput(txSumCents + offsetCents)}`)
+      return
+    }
+    const newOffset = parsed - txSumCents
+    if (newOffset === offsetCents) return
+    const db = getDb()
+    run(db, 'UPDATE accounts SET real_balance_offset_cents = ? WHERE id = ?', [newOffset, accountId])
+    touch()
+    persistSoon()
+  }
+
+  return (
+    <div className="mt-3 w-full min-w-[200px] max-w-sm rounded-lg border border-white/10 bg-surface-0/80 px-3 py-2">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Saldo atual real</p>
+      <p className="mt-0.5 text-xs text-zinc-400">
+        Soma dos lançamentos: {brlSigned(txSumCents)} · ajuste para bater com o banco
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              ;(e.target as HTMLInputElement).blur()
+            }
+          }}
+          inputMode="decimal"
+          className="min-w-[7rem] flex-1 rounded-lg border border-white/10 bg-surface-1 px-2 py-1.5 text-sm text-white outline-none ring-accent/30 focus:ring-1"
+          aria-label="Saldo atual real nesta conta"
+        />
+      </div>
+    </div>
+  )
+}
 
 export function AccountsPage() {
   const { getDb, touch, persistSoon, version, replaceDatabaseFromFile } = useFinanceDb()
@@ -29,9 +98,21 @@ export function AccountsPage() {
     const db = getDb()
     return queryAll(
       db,
-      `SELECT id, name, institution_key, kind, color, created_at
+      `SELECT id, name, institution_key, kind, color, created_at, real_balance_offset_cents
        FROM accounts WHERE deleted_at IS NULL ORDER BY created_at DESC`,
     )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getDb, version])
+
+  const txSumByAccount = useMemo(() => {
+    const db = getDb()
+    const rows = queryAll(
+      db,
+      `SELECT account_id, COALESCE(SUM(amount_cents), 0) AS s FROM transactions GROUP BY account_id`,
+    )
+    const m = new Map<string, number>()
+    for (const r of rows) m.set(String(r.account_id), Number(r.s ?? 0))
+    return m
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getDb, version])
 
@@ -43,15 +124,11 @@ export function AccountsPage() {
     const now = new Date().toISOString()
     const rawKey = institutionKey.trim()
     const keyNorm = rawKey ? normalizeInstitutionKey(rawKey) : null
-    run(db, 'INSERT INTO accounts (id, name, institution_key, kind, color, invoice_close_day, created_at) VALUES (?,?,?,?,?,?,?)', [
-      id,
-      name.trim(),
-      keyNorm,
-      kind,
-      null,
-      null,
-      now,
-    ])
+    run(
+      db,
+      'INSERT INTO accounts (id, name, institution_key, kind, color, invoice_close_day, real_balance_offset_cents, created_at) VALUES (?,?,?,?,?,?,?,?)',
+      [id, name.trim(), keyNorm, kind, null, null, 0, now],
+    )
     setName('')
     setInstitutionKey('')
     touch()
@@ -237,29 +314,47 @@ export function AccountsPage() {
           {accounts.length === 0 ? (
             <p className="text-sm text-zinc-500">Nenhuma conta ainda.</p>
           ) : (
-            accounts.map((a, i) => (
-              <motion.div
-                key={String(a.id)}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.03 }}
-                className="glass flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3"
-              >
-                <div>
-                  <p className="font-medium text-white">{String(a.name)}</p>
-                  <p className="text-xs text-zinc-500">
-                    {String(a.kind)} {a.institution_key ? `· ${String(a.institution_key)}` : ''}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onSoftDelete(String(a.id))}
-                  className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-300 hover:border-danger/50 hover:text-danger"
+            accounts.map((a, i) => {
+              const k = String(a.kind)
+              const isLiquidity = k === 'checking' || k === 'wallet'
+              const txSum = txSumByAccount.get(String(a.id)) ?? 0
+              const offset = Number(a.real_balance_offset_cents ?? 0)
+              return (
+                <motion.div
+                  key={String(a.id)}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.03 }}
+                  className="glass flex flex-col gap-3 rounded-xl px-4 py-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between"
                 >
-                  Remover (duplicidade)
-                </button>
-              </motion.div>
-            ))
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-white">{String(a.name)}</p>
+                    <p className="text-xs text-zinc-500">
+                      {k} {a.institution_key ? `· ${String(a.institution_key)}` : ''}
+                    </p>
+                    {isLiquidity ? (
+                      <AccountLiquidityBalanceEditor
+                        accountId={String(a.id)}
+                        txSumCents={txSum}
+                        offsetCents={offset}
+                        dbVersion={version}
+                      />
+                    ) : (
+                      <p className="mt-2 text-[11px] text-zinc-600">
+                        Saldo atual real só em contas corrente ou carteira — somadas na Visão geral.
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onSoftDelete(String(a.id))}
+                    className="shrink-0 self-start rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-300 hover:border-danger/50 hover:text-danger"
+                  >
+                    Remover (duplicidade)
+                  </button>
+                </motion.div>
+              )
+            })
           )}
         </div>
       </section>

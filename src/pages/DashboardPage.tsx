@@ -6,6 +6,7 @@ import { useMaskedMoney } from '../context/AmountVisibilityContext'
 import { useFinanceDb } from '../context/useFinanceDb'
 import {
   compareCategoriesBetweenMonths,
+  getLiquidityRealBalanceCents,
   getMonthPulse,
   getYearRecords,
   type CategoryDelta,
@@ -93,7 +94,15 @@ function StatColumn({
  * caminhando em que ritmo?" e a barra de progresso comparando com a média
  * dos últimos meses mesmo dia.
  */
-function MonthHero({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
+function MonthHero({
+  ym,
+  pulse,
+  liquidityRealBalanceCents,
+}: {
+  ym: string
+  pulse: MonthPulse
+  liquidityRealBalanceCents: number
+}) {
   const { brl, brlSigned } = useMaskedMoney()
   const {
     realExpenseCents,
@@ -151,7 +160,7 @@ function MonthHero({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatColumn
             label="Ganhos"
             value={brl(totalIncome)}
@@ -177,6 +186,12 @@ function MonthHero({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
             value={brlSigned(projectedLeftover)}
             valueClassName={toneForLeftover(projectedLeftover)}
             hint="Ganhos − (cartão + futuros)"
+          />
+          <StatColumn
+            label="Saldo atual real"
+            value={brlSigned(liquidityRealBalanceCents)}
+            valueClassName={toneForLeftover(liquidityRealBalanceCents)}
+            hint="Corrente + carteiras · lançamentos + ajuste em Contas"
           />
         </div>
 
@@ -601,13 +616,14 @@ export function DashboardPage() {
   const prev = ymPrevious(cur)
   const year = Number(cur.slice(0, 4))
 
-  const { pulse, deltas, records, investments } = useMemo(() => {
+  const { pulse, deltas, records, investments, liquidityRealBalanceCents } = useMemo(() => {
     const db = getDb()
     return {
       pulse: getMonthPulse(db, cur),
       deltas: compareCategoriesBetweenMonths(db, cur, prev),
       records: getYearRecords(db, year),
       investments: getInvestmentTotals(db, cur),
+      liquidityRealBalanceCents: getLiquidityRealBalanceCents(db),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- version invalida leituras após mutações no SQLite
   }, [getDb, version, cur, prev, year])
@@ -642,7 +658,11 @@ export function DashboardPage() {
       {hasAnyMonthData ? (
         <>
           <Section title="Como está o mês" delay={0}>
-            <MonthHero ym={cur} pulse={pulse} />
+            <MonthHero
+              ym={cur}
+              pulse={pulse}
+              liquidityRealBalanceCents={liquidityRealBalanceCents}
+            />
           </Section>
 
           <Section

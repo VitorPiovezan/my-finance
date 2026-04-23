@@ -14,6 +14,14 @@ function migrateAccountsInvoiceCloseDay(db: Database): void {
   }
 }
 
+function migrateAccountsRealBalanceOffset(db: Database): void {
+  try {
+    db.run('ALTER TABLE accounts ADD COLUMN real_balance_offset_cents INTEGER NOT NULL DEFAULT 0')
+  } catch {
+    /* coluna já existe */
+  }
+}
+
 function migrateBillingRefColumns(db: Database): void {
   try {
     db.run('ALTER TABLE transactions ADD COLUMN billing_ref_ym TEXT')
@@ -82,6 +90,7 @@ export async function createFinanceDatabase(buffer?: ArrayBuffer): Promise<Datab
   const db = buffer ? new SQL.Database(new Uint8Array(buffer)) : new SQL.Database()
   db.exec(MIGRATION_SQL)
   migrateAccountsInvoiceCloseDay(db)
+  migrateAccountsRealBalanceOffset(db)
   migrateBillingRefColumns(db)
   migrateInvestments(db)
   seedIfEmpty(db)
