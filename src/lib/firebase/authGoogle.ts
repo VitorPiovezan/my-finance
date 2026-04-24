@@ -50,6 +50,14 @@ export async function signInWithGoogle(): Promise<FirebaseGoogleSignIn> {
   const provider = googleProvider()
 
   if (isRnWebViewEmbed()) {
+    // Marca a URL (query antes do #) para o index.html devolver o resultado via
+    // myfinance:// (Custom Tab vira de volta pro app; Android não dispensa só com HTTPS).
+    if (typeof window !== 'undefined' && window.location) {
+      const u = new URL(window.location.href)
+      if (u.searchParams.get('x_rn') !== '1') u.searchParams.set('x_rn', '1')
+      const next = u.pathname + u.search + (u.hash || '')
+      window.history.replaceState(window.history.state, '', next)
+    }
     await signInWithRedirect(auth, provider)
     throw new FirebaseGoogleRedirectPending()
   }
