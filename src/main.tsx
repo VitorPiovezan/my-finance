@@ -3,10 +3,12 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import { AmountVisibilityProvider } from './context/AmountVisibilityContext'
 import { FinanceDbProvider } from './context/FinanceDbProvider'
+import { bootstrapDriveOAuthImplicitHash } from './lib/drive/googleAuth'
 import { normalizeHashOnlySpaUrl } from './lib/urls/hashRouterUrl'
 import './index.css'
 import App from './App.tsx'
 
+bootstrapDriveOAuthImplicitHash()
 normalizeHashOnlySpaUrl()
 
 createRoot(document.getElementById('root')!).render(

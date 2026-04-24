@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useFinanceDb } from '../context/useFinanceDb'
 import { queryAll, run } from '../lib/db/query'
@@ -8,7 +8,10 @@ import {
   loadDriveSessionToken,
   saveDriveSessionToken,
 } from '../lib/drive/driveTokenSession'
-import { requestDriveAccessToken } from '../lib/drive/googleAuth'
+import {
+  DRIVE_OAUTH_FLASH_ERROR_KEY,
+  requestDriveAccessToken,
+} from '../lib/drive/googleAuth'
 import { applyCsvImport } from '../lib/import/applyCsv'
 import { parseBankCsv } from '../lib/import/csv'
 import {
@@ -88,6 +91,14 @@ export function SyncPage() {
     setLog((prev) => [...prev.slice(-200), `[${new Date().toLocaleTimeString('pt-BR')}] ${line}`])
   }, [])
 
+  useEffect(() => {
+    const msg = sessionStorage.getItem(DRIVE_OAUTH_FLASH_ERROR_KEY)
+    if (msg) {
+      sessionStorage.removeItem(DRIVE_OAUTH_FLASH_ERROR_KEY)
+      queueMicrotask(() => appendLog(msg))
+    }
+  }, [appendLog])
+
   /** Grava no SQLite o que está no formulário antes de puxar/enviar/sincronizar — evita pasta só no input e merge sem meta. */
   const flushDriveFormToMeta = useCallback(() => {
     const db = getDb()
@@ -115,7 +126,7 @@ export function SyncPage() {
       await persistNow()
       const r = await pushLocalSqliteBackupToDrive({ db: getDb(), token: accessToken })
       if (!r.ok) {
-        appendLog(r.error)
+        appendLog('error' in r ? r.error : 'Falha ao enviar backup')
         return
       }
       appendLog(
@@ -174,7 +185,10 @@ export function SyncPage() {
         return
       }
       try {
-        const res = await requestDriveAccessToken(trimmed, true)
+        const res = await requestDriveAccessToken(trimmed, true, {
+          returnHash: '#/sincronizar',
+          source: 'sync',
+        })
         saveDriveSessionToken(trimmed, res.accessToken, res.expiresInSec)
         setToken(res.accessToken)
         const db = getDb()
@@ -204,7 +218,10 @@ export function SyncPage() {
       return
     }
     try {
-      const res = await requestDriveAccessToken(trimmed, true)
+      const res = await requestDriveAccessToken(trimmed, true, {
+        returnHash: '#/sincronizar',
+        source: 'sync',
+      })
       saveDriveSessionToken(trimmed, res.accessToken, res.expiresInSec)
       setToken(res.accessToken)
       const db = getDb()

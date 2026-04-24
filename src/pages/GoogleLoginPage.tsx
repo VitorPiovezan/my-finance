@@ -1,10 +1,13 @@
 import { motion } from 'framer-motion'
 import type { FormEvent } from 'react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useFinanceDb } from '../context/useFinanceDb'
 import { loadDriveSessionToken, saveDriveSessionToken } from '../lib/drive/driveTokenSession'
-import { requestDriveAccessToken } from '../lib/drive/googleAuth'
+import {
+  DRIVE_OAUTH_FLASH_ERROR_KEY,
+  requestDriveAccessToken,
+} from '../lib/drive/googleAuth'
 import { tryRestoreSqliteFromDriveAfterOAuth } from '../lib/drive/tryRestoreSqliteFromDrive'
 import { fetchDriveUserConfigByEmail, normalizeGoogleAccountEmail } from '../lib/firebase/driveUserConfig'
 import { isFirebaseConfigured } from '../lib/firebase/env'
@@ -28,6 +31,14 @@ export function GoogleLoginPage() {
   const [log, setLog] = useState<string[]>([])
 
   const registrationOk = Boolean((location.state as { registrationOk?: boolean } | null)?.registrationOk)
+
+  useEffect(() => {
+    const msg = sessionStorage.getItem(DRIVE_OAUTH_FLASH_ERROR_KEY)
+    if (msg) {
+      sessionStorage.removeItem(DRIVE_OAUTH_FLASH_ERROR_KEY)
+      setErr(msg)
+    }
+  }, [])
 
   const appendLog = (line: string) => {
     setLog((prev) => [...prev.slice(-40), line])
@@ -75,7 +86,11 @@ export function GoogleLoginPage() {
         await persistNow()
 
         appendLog('Abrindo login do Google com seu OAuth Client ID…')
-        const res = await requestDriveAccessToken(cfg.clientId, true)
+        const res = await requestDriveAccessToken(cfg.clientId, true, {
+          returnHash: '#/entrar',
+          source: 'login',
+          postLoginFrom: (location.state as { from?: string } | null)?.from,
+        })
         saveDriveSessionToken(cfg.clientId, res.accessToken, res.expiresInSec)
         appendLog('Google autorizado. Verificando backup no Drive…')
 

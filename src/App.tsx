@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
+import { DriveOAuthImplicitCompletion } from './components/DriveOAuthImplicitCompletion'
 import { FirebaseEmailLinkCompletion } from './components/FirebaseEmailLinkCompletion'
 import { GoogleAccessGate } from './components/GoogleAccessGate'
 import { AccountsPage } from './pages/AccountsPage'
@@ -21,6 +22,7 @@ export default function App() {
   return (
     <>
       <FirebaseEmailLinkCompletion />
+      <DriveOAuthImplicitCompletion />
       <Routes>
         <Route path="/entrar" element={<GoogleLoginPage />} />
         <Route path="/primeiro-acesso" element={<OnboardingGooglePage />} />
