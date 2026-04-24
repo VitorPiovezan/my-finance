@@ -32,15 +32,17 @@ export function DistributionDonutCard({
       <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
         Distribuição no período
       </p>
-      <DonutChart
-        slices={slices}
-        size={220}
-        strokeWidth={24}
-        centerLabel={brl(summary.totalCents)}
-        centerSub={`${summary.categoriesWithSpend} categoria${summary.categoriesWithSpend === 1 ? '' : 's'}`}
-        emptyMessage="Sem gastos no período"
-      />
-      <p className="max-w-[220px] text-center text-[11px] text-zinc-500">
+      <div className="w-full max-w-[220px] shrink-0">
+        <DonutChart
+          slices={slices}
+          size={220}
+          strokeWidth={24}
+          centerLabel={brl(summary.totalCents)}
+          centerSub={`${summary.categoriesWithSpend} categoria${summary.categoriesWithSpend === 1 ? '' : 's'}`}
+          emptyMessage="Sem gastos no período"
+        />
+      </div>
+      <p className="max-w-sm text-center text-[11px] text-zinc-500">
         Top 12 categorias. Cores iguais em outras telas.
       </p>
     </motion.div>
@@ -81,12 +83,23 @@ export function AccountSpendColumn({
         <p className="mt-4 text-sm text-zinc-500">Sem gastos neste mês.</p>
       ) : (
         <div className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {/* Mobile: sem coluna "Conta" + valores numa faixa; evita esmagar o nome. */}
+          {hasFutureSpend ? (
+            <div
+              className="mb-1.5 grid grid-cols-3 border-b border-white/5 px-2.5 pb-2 text-[9px] font-medium uppercase tracking-wide text-zinc-500 md:hidden"
+              aria-hidden
+            >
+              <span className="text-left">Real</span>
+              <span className="text-center">Futuro</span>
+              <span className="text-right">Total</span>
+            </div>
+          ) : null}
           <div
             className={[
-              'mb-1.5 grid items-end gap-x-2 border-b border-white/5 px-2.5 pb-2 text-[9px] font-medium uppercase tracking-wide text-zinc-500',
+              'mb-1.5 hidden items-end gap-x-2 border-b border-white/5 px-2.5 pb-2 text-[9px] font-medium uppercase tracking-wide text-zinc-500 md:grid',
               hasFutureSpend
-                ? 'grid-cols-[minmax(0,1fr)_repeat(3,5.25rem)] sm:grid-cols-[minmax(0,1fr)_repeat(3,5.75rem)]'
-                : 'grid-cols-[minmax(0,1fr)_minmax(5.25rem,auto)] sm:grid-cols-[minmax(0,1fr)_minmax(6rem,auto)]',
+                ? 'md:grid-cols-[minmax(0,1fr)_repeat(3,minmax(0,5.5rem))]'
+                : 'md:grid-cols-[minmax(0,1fr)_minmax(0,6.5rem)]',
             ].join(' ')}
             aria-hidden
           >
@@ -109,22 +122,15 @@ export function AccountSpendColumn({
                   key={row.accountId}
                   className="rounded-lg border border-white/5 bg-white/2 px-2.5 py-2"
                 >
-                  <div
-                    className={[
-                      'grid items-center gap-x-2',
-                      hasFutureSpend
-                        ? 'grid-cols-[minmax(0,1fr)_repeat(3,5.25rem)] sm:grid-cols-[minmax(0,1fr)_repeat(3,5.75rem)]'
-                        : 'grid-cols-[minmax(0,1fr)_minmax(5.25rem,auto)] sm:grid-cols-[minmax(0,1fr)_minmax(6rem,auto)]',
-                    ].join(' ')}
-                  >
-                    <p
-                      className="truncate text-sm font-medium leading-tight text-zinc-100"
-                      title={row.accountName}
-                    >
-                      {row.accountName}
-                    </p>
-                    {hasFutureSpend ? (
-                      <>
+                  {hasFutureSpend ? (
+                    <div className="grid max-md:grid-cols-1 max-md:gap-y-2 md:grid-cols-[minmax(0,1fr)_repeat(3,minmax(0,5.5rem))] md:items-center md:gap-x-2">
+                      <p
+                        className="min-w-0 break-words text-sm font-medium leading-snug text-zinc-100 md:truncate md:leading-tight"
+                        title={row.accountName}
+                      >
+                        {row.accountName}
+                      </p>
+                      <div className="grid grid-cols-3 gap-1 md:contents">
                         <p className="text-right text-[11px] font-medium tabular-nums leading-tight text-zinc-200 sm:text-xs">
                           {brl(row.realCents)}
                         </p>
@@ -136,12 +142,24 @@ export function AccountSpendColumn({
                         >
                           {brl(row.futureCents)}
                         </p>
-                      </>
-                    ) : null}
-                    <p className="text-right text-sm font-semibold tabular-nums leading-tight text-zinc-50">
-                      {brl(row.totalCents)}
-                    </p>
-                  </div>
+                        <p className="text-right text-sm font-semibold tabular-nums leading-tight text-zinc-50">
+                          {brl(row.totalCents)}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,6.5rem)] sm:items-center sm:gap-x-2">
+                      <p
+                        className="min-w-0 break-words text-sm font-medium leading-snug text-zinc-100 sm:truncate sm:leading-tight"
+                        title={row.accountName}
+                      >
+                        {row.accountName}
+                      </p>
+                      <p className="shrink-0 text-right text-sm font-semibold tabular-nums leading-tight text-zinc-50 sm:pt-0">
+                        {brl(row.totalCents)}
+                      </p>
+                    </div>
+                  )}
                   <p className="mt-1.5 text-[10px] text-zinc-500">
                     {accountKindLabelPt(row.accountKind)} · {row.count}{' '}
                     {row.count === 1 ? 'lançamento' : 'lançamentos'}

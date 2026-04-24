@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { useCategoriesPeriod } from '../context/CategoriesPeriodContext'
 import { CategoryHeatmap } from '../components/CategoryHeatmap'
 import { DistributionDonutCard, AccountSpendColumn } from '../components/MonthInsightsPanels'
 import { colorForCategoryId, type DonutSlice } from '../components/DonutChart'
@@ -19,8 +20,6 @@ import {
   type PeriodSummary,
 } from '../lib/queries/categorySpend'
 import { ymNow } from '../lib/queries/spendSummary'
-
-type ViewMode = 'year' | 'month'
 
 const UNCAT_KEY = '__uncat__'
 
@@ -447,24 +446,49 @@ export function CategoriesAnalyticsPage() {
   const { brl } = useMaskedMoney()
   const { getDb, version } = useFinanceDb()
   const defaultYear = new Date().getFullYear()
-  const [searchParams] = useSearchParams()
-  // Permite navegação externa via ?period=YYYY-MM (mês) ou ?period=YYYY (ano).
-  // Só consulta na montagem — depois o usuário controla pelo seletor visual.
-  const initialPeriod = useMemo(() => {
-    const raw = searchParams.get('period')
-    if (raw && /^\d{4}-\d{2}$/.test(raw)) {
-      return { mode: 'month' as ViewMode, ym: raw, year: Number(raw.slice(0, 4)) }
-    }
-    if (raw && /^\d{4}$/.test(raw)) {
-      return { mode: 'year' as ViewMode, ym: ymNow(), year: Number(raw) }
-    }
-    return { mode: 'year' as ViewMode, ym: ymNow(), year: defaultYear }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- leitura única no mount
-  }, [])
-  const [mode, setMode] = useState<ViewMode>(initialPeriod.mode)
-  const [year, setYear] = useState<number>(initialPeriod.year)
-  const [monthYm, setMonthYm] = useState<string>(initialPeriod.ym)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { mode, setMode, year, setYear, monthYm, setMonthYm, applyFromPeriodParam } = useCategoriesPeriod()
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
+
+  /**
+   * Ref com o estado atual: o efeito de URL NÃO pode depender de `mode`/`monthYm`/`year`,
+   * senão ao trocar o mês/ano a URL ainda é a antiga e o efeito reaplica o `period` antigo
+   * (flicker / loop).
+   */
+  const periodStateRef = useRef({ mode, year, monthYm })
+  periodStateRef.current = { mode, year, monthYm }
+
+  /** Só reage a mudança real da query string (ex.: clique com `?period=` vindo de outra tela). */
+  const periodInUrl = searchParams.get('period') ?? ''
+  useEffect(() => {
+    const raw = periodInUrl
+    if (!raw) return
+    const { mode: m, year: y, monthYm: ym } = periodStateRef.current
+    if (/^\d{4}-\d{2}$/.test(raw)) {
+      if (m === 'month' && ym === raw) return
+      applyFromPeriodParam(raw)
+      return
+    }
+    if (/^\d{4}$/.test(raw)) {
+      const yNum = Number(raw)
+      if (m === 'year' && y === yNum) return
+      applyFromPeriodParam(raw)
+    }
+  }, [periodInUrl, applyFromPeriodParam])
+
+  /** Sincroniza `?period=` com o filtro (forma funcional = sem dep de `searchParams`). */
+  useEffect(() => {
+    const p = mode === 'year' ? String(year) : monthYm
+    setSearchParams(
+      (prev) => {
+        if (prev.get('period') === p) return prev
+        const next = new URLSearchParams(prev)
+        next.set('period', p)
+        return next
+      },
+      { replace: true },
+    )
+  }, [mode, year, monthYm, setSearchParams])
 
   const periodPattern = mode === 'year' ? String(year) : monthYm
   const isCurrentMonth = mode === 'month' && monthYm === ymNow()
@@ -689,16 +713,16 @@ export function CategoriesAnalyticsPage() {
         }
       >
         {mode === 'month' ? (
-          <div className="flex min-w-0 flex-col gap-4 min-[400px]:flex-row min-[400px]:items-stretch">
+          <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-stretch">
             <DistributionDonutCard
               donutSlices={donutSlices}
               summary={data.summary}
-              className="min-w-0 flex-1 basis-0"
+              className="min-w-0 w-full md:flex-1 md:basis-0"
             />
             <AccountSpendColumn
               rows={data.accounts}
               periodTotalCents={data.summary.totalCents}
-              className="min-w-0 flex-1 basis-0"
+              className="min-w-0 w-full md:flex-1 md:basis-0"
             />
           </div>
         ) : (

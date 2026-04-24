@@ -445,16 +445,16 @@ export function LancamentosPage() {
             transition={{ delay: 0.02 }}
             className="space-y-2 border-t border-white/10 px-4 pb-4 pt-3"
           >
-            <div className="flex min-w-0 flex-col gap-4 min-[400px]:flex-row min-[400px]:items-stretch">
+            <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-stretch">
               <AccountSpendColumn
                 rows={monthInsights.accRows}
                 periodTotalCents={monthInsights.summary.totalCents}
-                className="min-w-0 flex-1 basis-0"
+                className="min-w-0 w-full md:flex-1 md:basis-0"
               />
               <DistributionDonutCard
                 donutSlices={insightDonutSlices}
                 summary={monthInsights.summary}
-                className="min-w-0 flex-1 basis-0"
+                className="min-w-0 w-full md:flex-1 md:basis-0"
               />
             </div>
             <p className="text-[11px] leading-relaxed text-zinc-500">

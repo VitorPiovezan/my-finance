@@ -6,6 +6,7 @@ import { GoogleAccessGate } from './components/GoogleAccessGate'
 import { AccountsPage } from './pages/AccountsPage'
 import { AgendaPage } from './pages/AgendaPage'
 import { AnalysisPage } from './pages/AnalysisPage'
+import { CategoriesPeriodProvider } from './context/CategoriesPeriodContext'
 import { CategoriesAnalyticsPage } from './pages/CategoriesAnalyticsPage'
 import { CategoriesPage } from './pages/CategoriesPage'
 import { CategorizePage } from './pages/CategorizePage'
@@ -39,7 +40,14 @@ export default function App() {
           <Route path="lancamentos" element={<LancamentosPage />} />
           <Route path="categorias" element={<CategoriesPage />} />
           <Route path="categorizar" element={<CategorizePage />} />
-          <Route path="por-categoria" element={<CategoriesAnalyticsPage />} />
+          <Route
+            path="por-categoria"
+            element={
+              <CategoriesPeriodProvider>
+                <CategoriesAnalyticsPage />
+              </CategoriesPeriodProvider>
+            }
+          />
           <Route path="agenda" element={<AgendaPage />} />
           <Route path="investimentos" element={<InvestmentsPage />} />
           <Route path="sincronizar" element={<SyncPage />} />

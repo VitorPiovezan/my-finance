@@ -1,9 +1,9 @@
-import { motion } from 'framer-motion'
-import { useMemo, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
-import { colorForCategoryId } from '../components/DonutChart'
-import { useMaskedMoney } from '../context/AmountVisibilityContext'
-import { useFinanceDb } from '../context/useFinanceDb'
+import { motion } from 'framer-motion';
+import { useMemo, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { colorForCategoryId } from '../components/DonutChart';
+import { useMaskedMoney } from '../context/AmountVisibilityContext';
+import { useFinanceDb } from '../context/useFinanceDb';
 import {
   compareCategoriesBetweenMonths,
   getLiquidityRealBalanceCents,
@@ -12,33 +12,42 @@ import {
   type CategoryDelta,
   type MonthPulse,
   type YearRecords,
-} from '../lib/queries/dashboardHighlights'
-import { getInvestmentTotals, type InvestmentTotals } from '../lib/queries/investments'
-import { ymNow, ymPrevious } from '../lib/queries/spendSummary'
+} from '../lib/queries/dashboardHighlights';
+import {
+  getInvestmentTotals,
+  type InvestmentTotals,
+} from '../lib/queries/investments';
+import { ymNow, ymPrevious } from '../lib/queries/spendSummary';
 
 function formatYmLabel(ym: string): string {
-  const [y, m] = ym.split('-').map(Number)
-  const dt = new Date(y, m - 1, 1)
-  const label = dt.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-  return label.charAt(0).toUpperCase() + label.slice(1)
+  const [y, m] = ym.split('-').map(Number);
+  const dt = new Date(y, m - 1, 1);
+  const label = dt.toLocaleDateString('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+  });
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function formatShortMonthLabel(ym: string): string {
-  const [y, m] = ym.split('-').map(Number)
-  const dt = new Date(y, m - 1, 1)
-  const label = dt.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
-  return label.replace('.', '').replace(' de ', '/')
+  const [y, m] = ym.split('-').map(Number);
+  const dt = new Date(y, m - 1, 1);
+  const label = dt.toLocaleDateString('pt-BR', {
+    month: 'short',
+    year: 'numeric',
+  });
+  return label.replace('.', '').replace(' de ', '/');
 }
 
 function pct(ratio: number): string {
-  const v = Math.round(ratio * 100)
-  return `${v > 0 ? '+' : ''}${v}%`
+  const v = Math.round(ratio * 100);
+  return `${v > 0 ? '+' : ''}${v}%`;
 }
 
 function toneForLeftover(cents: number): string {
-  if (cents < 0) return 'text-rose-200'
-  if (cents > 0) return 'text-emerald-200'
-  return 'text-white'
+  if (cents < 0) return 'text-rose-200';
+  if (cents > 0) return 'text-emerald-200';
+  return 'text-white';
 }
 
 function Section({
@@ -47,10 +56,10 @@ function Section({
   children,
   delay,
 }: {
-  title: string
-  hint?: string
-  children: ReactNode
-  delay: number
+  title: string;
+  hint?: string;
+  children: ReactNode;
+  delay: number;
 }) {
   return (
     <motion.section
@@ -61,31 +70,47 @@ function Section({
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-medium text-zinc-300">{title}</h2>
-        {hint ? <span className="text-[11px] text-zinc-500">{hint}</span> : null}
+        {hint ? (
+          <span className="text-[11px] text-zinc-500">{hint}</span>
+        ) : null}
       </div>
       {children}
     </motion.section>
-  )
+  );
 }
 
 function StatColumn({
   label,
   value,
+  valueNode,
   valueClassName = 'text-white',
   hint,
 }: {
-  label: string
-  value: string
-  valueClassName?: string
-  hint?: string
+  label: string;
+  value?: string;
+  valueNode?: ReactNode;
+  valueClassName?: string;
+  hint?: string;
 }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold tracking-tight tabular-nums ${valueClassName}`}>{value}</p>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+        {label}
+      </p>
+      {valueNode ? (
+        <div className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
+          {valueNode}
+        </div>
+      ) : (
+        <p
+          className={`mt-1 text-2xl font-semibold tracking-tight tabular-nums ${valueClassName}`}
+        >
+          {value}
+        </p>
+      )}
       {hint ? <p className="mt-0.5 text-[11px] text-zinc-500">{hint}</p> : null}
     </div>
-  )
+  );
 }
 
 /**
@@ -99,11 +124,11 @@ function MonthHero({
   pulse,
   liquidityRealBalanceCents,
 }: {
-  ym: string
-  pulse: MonthPulse
-  liquidityRealBalanceCents: number
+  ym: string;
+  pulse: MonthPulse;
+  liquidityRealBalanceCents: number;
 }) {
-  const { brl, brlSigned } = useMaskedMoney()
+  const { brl, brlSigned } = useMaskedMoney();
   const {
     realExpenseCents,
     realExpenseCreditCents,
@@ -116,31 +141,35 @@ function MonthHero({
     trailingMonthlyAverageCents,
     daysElapsed,
     daysInMonth,
-  } = pulse
+  } = pulse;
 
   // Regra do mês atual: gasto que forma saldo = cartão + futuros. Conta
   // corrente/carteira aparece como informação, mas fica fora do saldo pra
   // evitar contar pagamento de cartão duas vezes.
-  const spendForLeftoverCents = realExpenseCreditCents + pendingExpenseCents
-  const totalIncome = realIncomeCents + pendingIncomeCents
-  const projectedLeftover = totalIncome - spendForLeftoverCents
+  const spendForLeftoverCents = realExpenseCreditCents + pendingExpenseCents;
+  const totalIncome = realIncomeCents + pendingIncomeCents;
+  const projectedLeftover = totalIncome - spendForLeftoverCents;
+  const saldoPrevistoCents = liquidityRealBalanceCents + projectedLeftover;
 
   // Barra de "gasto do mês em relação à média". Normaliza pelo gasto médio
   // mensal dos últimos meses — se já passamos disso, enche e fica vermelho.
   const expectedSoFarCents =
     trailingMonthlyAverageCents > 0
       ? Math.round((trailingMonthlyAverageCents * daysElapsed) / daysInMonth)
-      : 0
+      : 0;
   const ratioOfAvg =
-    trailingMonthlyAverageCents > 0 ? realExpenseCents / trailingMonthlyAverageCents : 0
-  const progressFill = Math.max(0, Math.min(1, ratioOfAvg))
-  const overLimit = ratioOfAvg > 1
-  const pctOfMonth = Math.round((daysElapsed / daysInMonth) * 100)
+    trailingMonthlyAverageCents > 0
+      ? realExpenseCents / trailingMonthlyAverageCents
+      : 0;
+  const progressFill = Math.max(0, Math.min(1, ratioOfAvg));
+  const overLimit = ratioOfAvg > 1;
+  const pctOfMonth = Math.round((daysElapsed / daysInMonth) * 100);
 
   const prevDiff =
     previousMonthSameDayExpenseCents > 0
-      ? (realExpenseCents - previousMonthSameDayExpenseCents) / previousMonthSameDayExpenseCents
-      : null
+      ? (realExpenseCents - previousMonthSameDayExpenseCents) /
+        previousMonthSameDayExpenseCents
+      : null;
 
   return (
     <div className="glass relative overflow-hidden rounded-2xl p-6">
@@ -183,9 +212,18 @@ function MonthHero({
           />
           <StatColumn
             label="Saldo do mês"
-            value={brlSigned(projectedLeftover)}
-            valueClassName={toneForLeftover(projectedLeftover)}
-            hint="Ganhos − (cartão + futuros)"
+            valueNode={
+              <>
+                <span className={toneForLeftover(projectedLeftover)}>
+                  {brlSigned(projectedLeftover)}
+                </span>
+                <span className="text-zinc-500"> / </span>
+                <span className={toneForLeftover(saldoPrevistoCents)}>
+                  {brlSigned(saldoPrevistoCents)}
+                </span>
+              </>
+            }
+            hint="Ganhos − (Cartão + Futuros) / Saldo previsto"
           />
           <StatColumn
             label="Saldo atual real"
@@ -213,7 +251,9 @@ function MonthHero({
               <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
                 Ritmo vs. média dos últimos meses
               </p>
-              <p className={`text-[11px] tabular-nums ${overLimit ? 'text-rose-200' : 'text-zinc-400'}`}>
+              <p
+                className={`text-[11px] tabular-nums ${overLimit ? 'text-rose-200' : 'text-zinc-400'}`}
+              >
                 {brl(realExpenseCents)} / {brl(trailingMonthlyAverageCents)} ·{' '}
                 {Math.round(ratioOfAvg * 100)}%
               </p>
@@ -232,7 +272,8 @@ function MonthHero({
               ) : null}
             </div>
             <p className="mt-1.5 text-[11px] text-zinc-500">
-              A marca branca no meio é onde a gente <em>deveria</em> estar no dia {daysElapsed}.
+              A marca branca no meio é onde a gente <em>deveria</em> estar no
+              dia {daysElapsed}.
             </p>
           </div>
         ) : null}
@@ -243,10 +284,12 @@ function MonthHero({
               Ritmo diário real
             </p>
             <p className="mt-1 text-lg font-semibold tracking-tight text-white tabular-nums">
-              {brl(dailyRealRateCents)} <span className="text-xs font-normal text-zinc-500">/ dia</span>
+              {brl(dailyRealRateCents)}{' '}
+              <span className="text-xs font-normal text-zinc-500">/ dia</span>
             </p>
             <p className="mt-0.5 text-[11px] text-zinc-500">
-              {brl(realExpenseCents)} em {daysElapsed} {daysElapsed === 1 ? 'dia' : 'dias'}
+              {brl(realExpenseCents)} em {daysElapsed}{' '}
+              {daysElapsed === 1 ? 'dia' : 'dias'}
             </p>
           </div>
           <div>
@@ -269,7 +312,7 @@ function MonthHero({
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /**
@@ -277,7 +320,7 @@ function MonthHero({
  * com os gastos futuros já agendados pra estimar onde o mês vai fechar.
  */
 function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
-  const { brl, brlSigned } = useMaskedMoney()
+  const { brl, brlSigned } = useMaskedMoney();
   const {
     realExpenseCreditCents,
     realExpenseAccountCents,
@@ -287,17 +330,17 @@ function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
     dailyRealCreditRateCents,
     daysElapsed,
     daysInMonth,
-  } = pulse
+  } = pulse;
 
-  const daysLeft = Math.max(0, daysInMonth - daysElapsed)
+  const daysLeft = Math.max(0, daysInMonth - daysElapsed);
   // Mesma regra do hero: projeção considera só cartão + futuros pra formar
   // saldo (gastos de conta ficam fora pra evitar contar pagamento do cartão
   // duas vezes). O ritmo aqui também é só do cartão.
-  const projectedRhythmSpendCents = dailyRealCreditRateCents * daysLeft
+  const projectedRhythmSpendCents = dailyRealCreditRateCents * daysLeft;
   const projectedTotalExpense =
-    realExpenseCreditCents + projectedRhythmSpendCents + pendingExpenseCents
-  const projectedTotalIncome = realIncomeCents + pendingIncomeCents
-  const projectedLeftover = projectedTotalIncome - projectedTotalExpense
+    realExpenseCreditCents + projectedRhythmSpendCents + pendingExpenseCents;
+  const projectedTotalIncome = realIncomeCents + pendingIncomeCents;
+  const projectedLeftover = projectedTotalIncome - projectedTotalExpense;
 
   return (
     <div className="glass rounded-2xl p-5">
@@ -313,7 +356,8 @@ function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
 
       <p className="mt-3 text-sm text-zinc-300">
         No ritmo atual,{' '}
-        <strong className="text-white">{formatYmLabel(ym)}</strong> deve fechar com:
+        <strong className="text-white">{formatYmLabel(ym)}</strong> deve fechar
+        com:
       </p>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -356,7 +400,7 @@ function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
         </p>
       ) : null}
     </div>
-  )
+  );
 }
 
 /**
@@ -364,8 +408,14 @@ function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
  * (aportes e retiradas lado a lado). Não mostra rendimento — a gente só
  * rastreia nominal por enquanto.
  */
-function InvestmentsSummaryCard({ ym, totals }: { ym: string; totals: InvestmentTotals }) {
-  const { brl } = useMaskedMoney()
+function InvestmentsSummaryCard({
+  ym,
+  totals,
+}: {
+  ym: string;
+  totals: InvestmentTotals;
+}) {
+  const { brl } = useMaskedMoney();
   const {
     balanceCents,
     initialBalanceCents,
@@ -373,7 +423,7 @@ function InvestmentsSummaryCard({ ym, totals }: { ym: string; totals: Investment
     withdrawalsCents,
     contributionsCount,
     withdrawalsCount,
-  } = totals
+  } = totals;
 
   return (
     <Link
@@ -426,21 +476,21 @@ function InvestmentsSummaryCard({ ym, totals }: { ym: string; totals: Investment
         />
       </div>
     </Link>
-  )
+  );
 }
 
 function DeltaRow({ row, kind }: { row: CategoryDelta; kind: 'up' | 'down' }) {
-  const { brl, brlSigned } = useMaskedMoney()
-  const color = colorForCategoryId(row.categoryId)
-  const isUp = kind === 'up'
-  const arrow = isUp ? '↑' : '↓'
-  const arrowColor = isUp ? 'text-rose-300' : 'text-emerald-300'
+  const { brl, brlSigned } = useMaskedMoney();
+  const color = colorForCategoryId(row.categoryId);
+  const isUp = kind === 'up';
+  const arrow = isUp ? '↑' : '↓';
+  const arrowColor = isUp ? 'text-rose-300' : 'text-emerald-300';
   const deltaLabel =
     row.deltaPct == null
       ? row.previousCents === 0
         ? 'Novo'
         : ''
-      : pct(row.deltaPct)
+      : pct(row.deltaPct);
   return (
     <li className="flex min-w-0 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
       <span
@@ -463,7 +513,7 @@ function DeltaRow({ row, kind }: { row: CategoryDelta; kind: 'up' | 'down' }) {
         ) : null}
       </div>
     </li>
-  )
+  );
 }
 
 function VariationCards({
@@ -471,18 +521,18 @@ function VariationCards({
   previousYm,
   deltas,
 }: {
-  currentYm: string
-  previousYm: string
-  deltas: CategoryDelta[]
+  currentYm: string;
+  previousYm: string;
+  deltas: CategoryDelta[];
 }) {
   const ups = deltas
-    .filter((d) => d.deltaCents > 0)
+    .filter(d => d.deltaCents > 0)
     .sort((a, b) => b.deltaCents - a.deltaCents)
-    .slice(0, 3)
+    .slice(0, 3);
   const downs = deltas
-    .filter((d) => d.deltaCents < 0)
+    .filter(d => d.deltaCents < 0)
     .sort((a, b) => a.deltaCents - b.deltaCents)
-    .slice(0, 3)
+    .slice(0, 3);
 
   if (ups.length === 0 && downs.length === 0) {
     return (
@@ -490,47 +540,63 @@ function VariationCards({
         Ainda não dá pra comparar {formatShortMonthLabel(currentYm)} com{' '}
         {formatShortMonthLabel(previousYm)} — falta dado em algum dos dois.
       </div>
-    )
+    );
   }
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <div className="glass rounded-2xl p-5">
         <div className="flex items-baseline justify-between gap-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Subiram mais</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Subiram mais
+          </p>
           <span className="text-[11px] text-zinc-500">
             vs. {formatShortMonthLabel(previousYm)}
           </span>
         </div>
         {ups.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500">Nenhuma categoria subiu neste mês.</p>
+          <p className="mt-3 text-sm text-zinc-500">
+            Nenhuma categoria subiu neste mês.
+          </p>
         ) : (
           <ul className="mt-3 space-y-2">
-            {ups.map((row) => (
-              <DeltaRow key={row.categoryId ?? '__uncat_up__'} row={row} kind="up" />
+            {ups.map(row => (
+              <DeltaRow
+                key={row.categoryId ?? '__uncat_up__'}
+                row={row}
+                kind="up"
+              />
             ))}
           </ul>
         )}
       </div>
       <div className="glass rounded-2xl p-5">
         <div className="flex items-baseline justify-between gap-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Caíram mais</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Caíram mais
+          </p>
           <span className="text-[11px] text-zinc-500">
             vs. {formatShortMonthLabel(previousYm)}
           </span>
         </div>
         {downs.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500">Nenhuma categoria caiu neste mês.</p>
+          <p className="mt-3 text-sm text-zinc-500">
+            Nenhuma categoria caiu neste mês.
+          </p>
         ) : (
           <ul className="mt-3 space-y-2">
-            {downs.map((row) => (
-              <DeltaRow key={row.categoryId ?? '__uncat_down__'} row={row} kind="down" />
+            {downs.map(row => (
+              <DeltaRow
+                key={row.categoryId ?? '__uncat_down__'}
+                row={row}
+                kind="down"
+              />
             ))}
           </ul>
         )}
       </div>
     </div>
-  )
+  );
 }
 
 function RecordCard({
@@ -540,37 +606,63 @@ function RecordCard({
   tone = 'neutral',
   to,
 }: {
-  label: string
-  value: string
-  subtitle?: string
-  tone?: 'neutral' | 'rose' | 'emerald'
-  to?: string
+  label: string;
+  value: string;
+  subtitle?: string;
+  tone?: 'neutral' | 'rose' | 'emerald';
+  to?: string;
 }) {
   const color =
-    tone === 'rose' ? 'text-rose-200' : tone === 'emerald' ? 'text-emerald-200' : 'text-white'
+    tone === 'rose'
+      ? 'text-rose-200'
+      : tone === 'emerald'
+        ? 'text-emerald-200'
+        : 'text-white';
   const inner = (
     <div className="glass h-full rounded-2xl p-5 transition group-hover:border-white/20 group-hover:bg-white/[0.05]">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{label}</p>
-      <p className={`mt-2 text-xl font-semibold tracking-tight tabular-nums ${color}`}>{value}</p>
-      {subtitle ? <p className="mt-1 text-xs text-zinc-400">{subtitle}</p> : null}
+      <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+        {label}
+      </p>
+      <p
+        className={`mt-2 text-xl font-semibold tracking-tight tabular-nums ${color}`}
+      >
+        {value}
+      </p>
+      {subtitle ? (
+        <p className="mt-1 text-xs text-zinc-400">{subtitle}</p>
+      ) : null}
     </div>
-  )
+  );
   if (to)
     return (
-      <Link to={to} aria-label={`${label}: ${value}`} className="group block outline-none">
+      <Link
+        to={to}
+        aria-label={`${label}: ${value}`}
+        className="group block outline-none"
+      >
         {inner}
       </Link>
-    )
-  return <div className="group block">{inner}</div>
+    );
+  return <div className="group block">{inner}</div>;
 }
 
-function RecordsGrid({ year, records }: { year: number; records: YearRecords }) {
-  const { brl, brlSigned } = useMaskedMoney()
+function RecordsGrid({
+  year,
+  records,
+}: {
+  year: number;
+  records: YearRecords;
+}) {
+  const { brl, brlSigned } = useMaskedMoney();
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <RecordCard
         label="Maior gasto do ano"
-        value={records.biggestExpense ? brl(-records.biggestExpense.amountCents) : '—'}
+        value={
+          records.biggestExpense
+            ? brl(-records.biggestExpense.amountCents)
+            : '—'
+        }
         subtitle={
           records.biggestExpense
             ? `${records.biggestExpense.description} · ${records.biggestExpense.accountName} · ${records.biggestExpense.occurredAt.slice(0, 10)}`
@@ -581,59 +673,84 @@ function RecordsGrid({ year, records }: { year: number; records: YearRecords }) 
       <RecordCard
         label="Top categoria do ano"
         value={records.topCategory ? brl(records.topCategory.cents) : '—'}
-        subtitle={records.topCategory ? records.topCategory.name : 'Sem dados de categoria ainda'}
+        subtitle={
+          records.topCategory
+            ? records.topCategory.name
+            : 'Sem dados de categoria ainda'
+        }
         tone="rose"
       />
       <RecordCard
         label="Melhor mês de sobra"
-        value={records.bestMonth ? brlSigned(records.bestMonth.leftoverCents) : '—'}
+        value={
+          records.bestMonth ? brlSigned(records.bestMonth.leftoverCents) : '—'
+        }
         subtitle={
           records.bestMonth
             ? `${formatYmLabel(records.bestMonth.ym)} — ganhos − gastos`
             : 'Precisa de pelo menos um mês com dados'
         }
-        tone={records.bestMonth && records.bestMonth.leftoverCents >= 0 ? 'emerald' : 'neutral'}
-        to={records.bestMonth ? `/por-categoria?period=${records.bestMonth.ym}` : undefined}
+        tone={
+          records.bestMonth && records.bestMonth.leftoverCents >= 0
+            ? 'emerald'
+            : 'neutral'
+        }
+        to={
+          records.bestMonth
+            ? `/por-categoria?period=${records.bestMonth.ym}`
+            : undefined
+        }
       />
       <RecordCard
         label="Pior mês de sobra"
-        value={records.worstMonth ? brlSigned(records.worstMonth.leftoverCents) : '—'}
+        value={
+          records.worstMonth ? brlSigned(records.worstMonth.leftoverCents) : '—'
+        }
         subtitle={
           records.worstMonth
             ? `${formatYmLabel(records.worstMonth.ym)} — ganhos − gastos`
             : 'Precisa de pelo menos um mês com dados'
         }
-        tone={records.worstMonth && records.worstMonth.leftoverCents < 0 ? 'rose' : 'neutral'}
-        to={records.worstMonth ? `/por-categoria?period=${records.worstMonth.ym}` : undefined}
+        tone={
+          records.worstMonth && records.worstMonth.leftoverCents < 0
+            ? 'rose'
+            : 'neutral'
+        }
+        to={
+          records.worstMonth
+            ? `/por-categoria?period=${records.worstMonth.ym}`
+            : undefined
+        }
       />
     </div>
-  )
+  );
 }
 
 export function DashboardPage() {
-  const { getDb, version } = useFinanceDb()
-  const cur = ymNow()
-  const prev = ymPrevious(cur)
-  const year = Number(cur.slice(0, 4))
+  const { getDb, version } = useFinanceDb();
+  const cur = ymNow();
+  const prev = ymPrevious(cur);
+  const year = Number(cur.slice(0, 4));
 
-  const { pulse, deltas, records, investments, liquidityRealBalanceCents } = useMemo(() => {
-    const db = getDb()
-    return {
-      pulse: getMonthPulse(db, cur),
-      deltas: compareCategoriesBetweenMonths(db, cur, prev),
-      records: getYearRecords(db, year),
-      investments: getInvestmentTotals(db, cur),
-      liquidityRealBalanceCents: getLiquidityRealBalanceCents(db),
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- version invalida leituras após mutações no SQLite
-  }, [getDb, version, cur, prev, year])
+  const { pulse, deltas, records, investments, liquidityRealBalanceCents } =
+    useMemo(() => {
+      const db = getDb();
+      return {
+        pulse: getMonthPulse(db, cur),
+        deltas: compareCategoriesBetweenMonths(db, cur, prev),
+        records: getYearRecords(db, year),
+        investments: getInvestmentTotals(db, cur),
+        liquidityRealBalanceCents: getLiquidityRealBalanceCents(db),
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- version invalida leituras após mutações no SQLite
+    }, [getDb, version, cur, prev, year]);
 
   const hasAnyMonthData =
     pulse.realExpenseCents +
       pulse.realIncomeCents +
       pulse.pendingExpenseCents +
       pulse.pendingIncomeCents >
-    0
+    0;
 
   return (
     <div className="space-y-8">
@@ -646,8 +763,9 @@ export function DashboardPage() {
           Visão geral
         </motion.h1>
         <p className="mt-2 max-w-2xl text-sm text-zinc-400">
-          Um apanhado rápido do mês atual, pra onde ele caminha e o que mudou em relação ao
-          mês passado. Pro detalhe por categoria, conta ou cartão, use{' '}
+          Um apanhado rápido do mês atual, pra onde ele caminha e o que mudou em
+          relação ao mês passado. Pro detalhe por categoria, conta ou cartão,
+          use{' '}
           <Link to="/por-categoria" className="text-accent-2 hover:underline">
             Por categoria
           </Link>
@@ -721,5 +839,5 @@ export function DashboardPage() {
         </motion.div>
       )}
     </div>
-  )
+  );
 }
