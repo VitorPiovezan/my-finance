@@ -4,6 +4,8 @@ import { useFinanceDb } from '../context/useFinanceDb'
 import { loadDriveSessionToken } from '../lib/drive/driveTokenSession'
 import { isFirebaseConfigured, isGoogleAccessGateDisabled } from '../lib/firebase/env'
 import { getEffectiveDriveOauthClientIdPreferSession } from '../lib/settings/driveFolder'
+import { needsNativeAppPinGate } from '../lib/session/appSessionUnlock'
+import { hasQuickUnlockEnvelope } from '../lib/session/pinQuickUnlock'
 
 const LOGIN_PATH = '/entrar'
 const ONBOARD_PATH = '/primeiro-acesso'
@@ -43,6 +45,12 @@ export function GoogleAccessGate({ children }: { children: ReactNode }) {
 
   const clientId = getEffectiveDriveOauthClientIdPreferSession(getDb())
   const token = loadDriveSessionToken(clientId)
+  if (
+    token &&
+    needsNativeAppPinGate(true, hasQuickUnlockEnvelope())
+  ) {
+    return <Navigate to={LOGIN_PATH} replace state={{ from: location.pathname }} />
+  }
   if (token) {
     return <>{children}</>
   }

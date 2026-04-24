@@ -1,4 +1,5 @@
 import { getPublicAppBaseUrl } from '../urls/publicAppUrl'
+import { DRIVE_OAUTH_SCOPES } from './driveOAuthScopes'
 
 export function loadGsiScript(): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve()
@@ -41,6 +42,11 @@ export type DriveOAuthRedirectContext = {
   source: 'login' | 'sync'
   /** Só login: rota protegida que o utilizador tentou abrir (GoogleAccessGate). */
   postLoginFrom?: string
+  /**
+   * E-mail já escolhido no login Firebase; o GIS/OAuth usa como `login_hint` para
+   * reutilizar a mesma conta e evitar um segundo «Escolha uma conta».
+   */
+  loginHint?: string
 }
 
 type OAuthPendingPayload = {
@@ -60,11 +66,6 @@ export function isRnWebViewEmbed(): boolean {
     (window as unknown as { __MY_FINANCE_RN_WEBVIEW__?: boolean }).__MY_FINANCE_RN_WEBVIEW__,
   )
 }
-
-const DRIVE_OAUTH_SCOPES = [
-  'https://www.googleapis.com/auth/drive.readonly',
-  'https://www.googleapis.com/auth/drive.file',
-].join(' ')
 
 /**
  * redirect_uri deve estar idêntico em «APIs e serviços → Credenciais → ID do cliente OAuth»
@@ -99,6 +100,8 @@ export function startDriveOAuthImplicitRedirect(
   u.searchParams.set('state', state)
   u.searchParams.set('include_granted_scopes', 'true')
   if (forceConsent) u.searchParams.set('prompt', 'consent')
+  const hint = ctx.loginHint?.trim()
+  if (hint?.includes('@')) u.searchParams.set('login_hint', hint)
 
   window.location.assign(u.toString())
 }
@@ -184,6 +187,8 @@ export function requestDriveAccessToken(
     })
   }
 
+  const loginHint = redirectContext?.loginHint?.trim()
+
   return loadGsiScript().then(
     () =>
       new Promise((resolve, reject) => {
@@ -214,7 +219,11 @@ export function requestDriveAccessToken(
             })
           },
         })
-        client.requestAccessToken({ prompt: forceConsent ? 'consent' : '' })
+        const hint = loginHint?.includes('@') ? loginHint : undefined
+        client.requestAccessToken({
+          prompt: forceConsent ? 'consent' : '',
+          ...(hint ? { login_hint: hint } : {}),
+        })
       }),
   )
 }

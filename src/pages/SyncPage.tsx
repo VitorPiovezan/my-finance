@@ -185,7 +185,7 @@ export function SyncPage() {
         return
       }
       try {
-        const res = await requestDriveAccessToken(trimmed, true, {
+        const res = await requestDriveAccessToken(trimmed, false, {
           returnHash: '#/sincronizar',
           source: 'sync',
         })
@@ -218,7 +218,7 @@ export function SyncPage() {
       return
     }
     try {
-      const res = await requestDriveAccessToken(trimmed, true, {
+      const res = await requestDriveAccessToken(trimmed, false, {
         returnHash: '#/sincronizar',
         source: 'sync',
       })

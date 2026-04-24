@@ -357,7 +357,7 @@ export function AppShell() {
   ];
 
   return (
-    <div className="mx-auto flex min-h-svh flex-col gap-6 px-4 pb-6 md:flex-row md:px-6">
+    <div className="mx-auto flex min-h-svh flex-col gap-6 px-4 pb-6 md:py-6 md:flex-row md:px-6">
       <header className="sticky top-0 z-30 -mx-4 flex shrink-0 items-center gap-3 border-b border-white/10 bg-[rgb(9,9,11)]/50 px-4 py-3 backdrop-blur-xl backdrop-saturate-150 md:hidden">
         <button
           type="button"

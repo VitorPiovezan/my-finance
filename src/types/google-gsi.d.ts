@@ -9,7 +9,12 @@ declare global {
             client_id: string
             scope: string
             callback: (resp: { access_token?: string; error?: string; error_description?: string }) => void
-          }) => { requestAccessToken: (opts?: { prompt?: '' | 'consent' }) => void }
+          }) => {
+            requestAccessToken: (opts?: {
+              prompt?: '' | 'consent'
+              login_hint?: string
+            }) => void
+          }
         }
       }
     }
