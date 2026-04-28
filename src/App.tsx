@@ -17,6 +17,7 @@ import { ImportacoesPage } from './pages/ImportacoesPage'
 import { InvestmentsPage } from './pages/InvestmentsPage'
 import { LancamentosPage } from './pages/LancamentosPage'
 import { OnboardingGooglePage } from './pages/OnboardingGooglePage'
+import { SimuladorPjPage } from './pages/SimuladorPjPage'
 import { SyncPage } from './pages/SyncPage'
 
 export default function App() {
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="sincronizar" element={<SyncPage />} />
           <Route path="importacoes" element={<ImportacoesPage />} />
           <Route path="config-ia" element={<ConfigIaPage />} />
+          <Route path="simulador-pj" element={<SimuladorPjPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

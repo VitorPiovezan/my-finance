@@ -7,6 +7,15 @@ export function formatBRL(cents: number): string {
   }).format(cents / 100)
 }
 
+/** Valor em reais para inputs (sem prefixo R$), ex.: "1.234,56". */
+export function formatMoneyInputFromCents(cents: number): string {
+  if (!Number.isFinite(cents) || cents === 0) return ''
+  return (cents / 100).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
 /** Formato curto para células densas (ex.: mapa de calor). */
 export function formatBRLCompact(cents: number): string {
   const v = cents / 100

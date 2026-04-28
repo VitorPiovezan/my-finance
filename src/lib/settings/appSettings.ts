@@ -18,6 +18,12 @@ export const SETTING_KEYS = {
   aiGeminiModel: 'ai.gemini.model',
   driveOauthClientId: 'drive.oauth_client_id',
   driveRootFolderId: 'drive.root_folder_id',
+  /** Simulador PJ — valores em centavos (string inteira) ou % com ponto decimal */
+  pjSimFaturamentoCents: 'pj.sim.faturamento_cents',
+  pjSimContaCents: 'pj.sim.conta_cents',
+  pjSimValorMantidoContaCents: 'pj.sim.valor_mantido_conta_cents',
+  pjSimImpostoPct: 'pj.sim.imposto_pct',
+  pjSimProlaboreCents: 'pj.sim.prolabore_cents',
 } as const
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS]
