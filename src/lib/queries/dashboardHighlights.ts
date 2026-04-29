@@ -21,13 +21,12 @@ export type MonthPulse = {
   realExpenseCents: number
   /**
    * Gastos já ocorridos só em cartão de crédito. Positivo.
-   *
-   * Usado junto com `pendingExpenseCents` pra formar o número que entra no
-   * saldo projetado do mês atual — contas/carteiras ficam de fora porque
-   * costumam incluir pagamento do cartão (evita contar duas vezes).
+   * Detalhe pra UI; o total que entra no hero/projeção é `realExpenseCents` +
+   * `pendingExpenseCents` (contas corrente/carteira/outras entram, exceto
+   * categorias transferência/investimento na query).
    */
   realExpenseCreditCents: number
-  /** Gastos já ocorridos em contas/carteiras (kind != 'credit'). Positivo. Informativo. */
+  /** Gastos já ocorridos em contas/carteiras (kind != 'credit'). Positivo. Detalhe pra UI. */
   realExpenseAccountCents: number
   /** Gastos agendados pendentes ainda referentes ao mês. Positivo. */
   pendingExpenseCents: number
@@ -35,6 +34,13 @@ export type MonthPulse = {
   realIncomeCents: number
   /** Entradas agendadas pendentes no mês. Positivo. */
   pendingIncomeCents: number
+  /**
+   * Futuros só em conta corrente + carteira (o mesmo escopo de
+   * `getLiquidityRealBalanceCents`). Usado pra “saldo previsto” sem duplicar
+   * o que já entrou no saldo atual via lançamentos realizados.
+   */
+  pendingExpenseLiquidityCents: number
+  pendingIncomeLiquidityCents: number
   /** Ritmo diário real considerando todo gasto real (cartão + conta). */
   dailyRealRateCents: number
   /** Ritmo diário real só do cartão (usado pra projetar saldo). */
@@ -73,8 +79,10 @@ export function getMonthPulse(db: Database, ym: string, today = new Date()): Mon
       COALESCE(SUM(CASE WHEN t.amount_cents < 0 AND t.source != 'scheduled' AND a.kind  = 'credit' THEN -t.amount_cents ELSE 0 END), 0) AS real_expense_credit,
       COALESCE(SUM(CASE WHEN t.amount_cents < 0 AND t.source != 'scheduled' AND a.kind != 'credit' THEN -t.amount_cents ELSE 0 END), 0) AS real_expense_account,
       COALESCE(SUM(CASE WHEN t.amount_cents < 0 AND t.source  = 'scheduled' THEN -t.amount_cents ELSE 0 END), 0) AS pending_expense,
+      COALESCE(SUM(CASE WHEN t.amount_cents < 0 AND t.source  = 'scheduled' AND a.kind IN ('checking','wallet') THEN -t.amount_cents ELSE 0 END), 0) AS pending_expense_liquidity,
       COALESCE(SUM(CASE WHEN t.amount_cents > 0 AND t.source != 'scheduled' THEN  t.amount_cents ELSE 0 END), 0) AS real_income,
-      COALESCE(SUM(CASE WHEN t.amount_cents > 0 AND t.source  = 'scheduled' THEN  t.amount_cents ELSE 0 END), 0) AS pending_income
+      COALESCE(SUM(CASE WHEN t.amount_cents > 0 AND t.source  = 'scheduled' THEN  t.amount_cents ELSE 0 END), 0) AS pending_income,
+      COALESCE(SUM(CASE WHEN t.amount_cents > 0 AND t.source  = 'scheduled' AND a.kind IN ('checking','wallet') THEN  t.amount_cents ELSE 0 END), 0) AS pending_income_liquidity
     FROM v_tx_plus_future t
     JOIN accounts a ON a.id = t.account_id AND a.deleted_at IS NULL
     LEFT JOIN categories c ON c.id = t.category_id
@@ -88,8 +96,10 @@ export function getMonthPulse(db: Database, ym: string, today = new Date()): Mon
   const realExpenseAccountCents = Number(row?.real_expense_account ?? 0)
   const realExpenseCents = realExpenseCreditCents + realExpenseAccountCents
   const pendingExpenseCents = Number(row?.pending_expense ?? 0)
+  const pendingExpenseLiquidityCents = Number(row?.pending_expense_liquidity ?? 0)
   const realIncomeCents = Number(row?.real_income ?? 0)
   const pendingIncomeCents = Number(row?.pending_income ?? 0)
+  const pendingIncomeLiquidityCents = Number(row?.pending_income_liquidity ?? 0)
 
   // Comparação "mesmo dia do mês passado": gasto real acumulado até `daysElapsed`
   // no mês anterior ao `ym`. Vale só pra contextualizar o ritmo — pode ser 0.
@@ -152,6 +162,8 @@ export function getMonthPulse(db: Database, ym: string, today = new Date()): Mon
     pendingExpenseCents,
     realIncomeCents,
     pendingIncomeCents,
+    pendingExpenseLiquidityCents,
+    pendingIncomeLiquidityCents,
     dailyRealRateCents,
     dailyRealCreditRateCents,
     previousMonthSameDayExpenseCents,

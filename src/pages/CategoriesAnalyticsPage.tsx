@@ -96,12 +96,10 @@ function KpiCard({
 /**
  * Card destacado de total gasto.
  *
- * Comportamento depende de `isCurrentMonth`:
- * - Mês atual: total do topo = Cartão + Gastos futuros. Mostra coluna "Gastos
- *   futuros" entre Cartão e Contas. Rodapé exibe Total recebido + Ganho futuro.
- *   Faz sentido porque futuros são projeção do que vai sair.
- * - Outros períodos (mês passado ou ano): total = Cartão + Contas, sem seção
- *   de futuros (não há projeção quando o período já foi consolidado ou é anual).
+ * No **mês atual**, se existir gasto futuro ou ganho futuro, o topo soma
+ * cartão + futuros e contas ficam “fora do total”; o rodapé mostra ganho
+ * futuro e saldo projetado. Se ambos os futuros forem zero, o card fica igual
+ * ao dos outros períodos: cartão + contas no total e só “Total recebido”.
  */
 function TotalSpendCard({
   summary,
@@ -117,7 +115,10 @@ function TotalSpendCard({
   const income = summary.incomeCents
   const futureIncome = summary.futureIncomeCents
 
-  const topTotal = isCurrentMonth ? credit + future : credit + account
+  const showFutureLayout =
+    isCurrentMonth && (future > 0 || futureIncome > 0)
+
+  const topTotal = showFutureLayout ? credit + future : credit + account
   const creditPct = topTotal > 0 ? Math.round((credit / topTotal) * 100) : 0
   const futurePct = topTotal > 0 ? Math.round((future / topTotal) * 100) : 0
   const accountPct = topTotal > 0 ? Math.round((account / topTotal) * 100) : 0
@@ -138,7 +139,7 @@ function TotalSpendCard({
       <p
         className="mt-2 text-2xl font-semibold tracking-tight tabular-nums text-rose-200"
         title={
-          isCurrentMonth
+          showFutureLayout
             ? 'Cartão de crédito + gastos futuros cadastrados para o mês.'
             : 'Cartão de crédito + contas e carteiras.'
         }
@@ -146,7 +147,7 @@ function TotalSpendCard({
         {brl(topTotal)}
       </p>
 
-      {isCurrentMonth ? (
+      {showFutureLayout ? (
         <div className="mt-4 grid grid-cols-3 gap-3 border-t border-white/5 pt-3">
           <div className="min-w-0">
             <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
@@ -227,7 +228,7 @@ function TotalSpendCard({
       <div
         className={[
           'mt-3 grid gap-3 border-t border-white/5 pt-3',
-          isCurrentMonth ? 'grid-cols-3' : 'grid-cols-1',
+          showFutureLayout ? 'grid-cols-3' : 'grid-cols-1',
         ].join(' ')}
       >
         <div className="min-w-0">
@@ -245,7 +246,7 @@ function TotalSpendCard({
             {summary.incomeCount === 1 ? 'lançamento' : 'lançamentos'}
           </p>
         </div>
-        {isCurrentMonth ? (
+        {showFutureLayout ? (
           <>
             <div className="min-w-0">
               <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">

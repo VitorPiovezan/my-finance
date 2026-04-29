@@ -134,8 +134,10 @@ function MonthHero({
     realExpenseCreditCents,
     realExpenseAccountCents,
     pendingExpenseCents,
+    pendingExpenseLiquidityCents,
     realIncomeCents,
     pendingIncomeCents,
+    pendingIncomeLiquidityCents,
     dailyRealRateCents,
     previousMonthSameDayExpenseCents,
     trailingMonthlyAverageCents,
@@ -143,13 +145,21 @@ function MonthHero({
     daysInMonth,
   } = pulse;
 
-  // Regra do mês atual: gasto que forma saldo = cartão + futuros. Conta
-  // corrente/carteira aparece como informação, mas fica fora do saldo pra
-  // evitar contar pagamento de cartão duas vezes.
-  const spendForLeftoverCents = realExpenseCreditCents + pendingExpenseCents;
+  // Gasto que forma saldo = tudo que já saiu (cartão + contas/carteiras) +
+  // futuros. Transferências e mov. de investimento já são filtrados na query.
+  const spendForLeftoverCents = realExpenseCents + pendingExpenseCents;
   const totalIncome = realIncomeCents + pendingIncomeCents;
   const projectedLeftover = totalIncome - spendForLeftoverCents;
-  const saldoPrevistoCents = liquidityRealBalanceCents + projectedLeftover;
+  // Saldo previsto: só ajusta o saldo em corrente + carteiras pelos agendados
+  // nessas contas (o realizado já está embutido em `liquidityRealBalanceCents`).
+  const saldoPrevistoCents =
+    liquidityRealBalanceCents +
+    pendingIncomeLiquidityCents -
+    pendingExpenseLiquidityCents;
+  const pendingExpenseOnCardCents = Math.max(
+    0,
+    pendingExpenseCents - pendingExpenseLiquidityCents,
+  );
 
   // Barra de "gasto do mês em relação à média". Normaliza pelo gasto médio
   // mensal dos últimos meses — se já passamos disso, enche e fica vermelho.
@@ -201,17 +211,19 @@ function MonthHero({
             }
           />
           <StatColumn
-            label="Gastos (cartão + futuros)"
+            label="Gastos"
             value={brl(spendForLeftoverCents)}
             valueClassName="text-rose-200"
-            hint={
-              pendingExpenseCents > 0
-                ? `${brl(realExpenseCreditCents)} cartão · ${brl(pendingExpenseCents)} futuro`
-                : `${brl(realExpenseCreditCents)} no cartão`
-            }
+            hint={[
+              realExpenseCreditCents > 0 ? `${brl(realExpenseCreditCents)} cartão` : null,
+              realExpenseAccountCents > 0 ? `${brl(realExpenseAccountCents)} contas` : null,
+              pendingExpenseCents > 0 ? `${brl(pendingExpenseCents)} futuro` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           />
           <StatColumn
-            label="Saldo do mês"
+            label="Sobra no mês · saldo nas contas"
             valueNode={
               <>
                 <span className={toneForLeftover(projectedLeftover)}>
@@ -223,7 +235,7 @@ function MonthHero({
                 </span>
               </>
             }
-            hint="Ganhos − (Cartão + Futuros) / Saldo previsto"
+            hint="Esquerda: ganhos − gastos do mês. Direita: saldo corrente + carteiras após baixar só os futuros agendados nessas contas."
           />
           <StatColumn
             label="Saldo atual real"
@@ -233,14 +245,14 @@ function MonthHero({
           />
         </div>
 
-        {realExpenseAccountCents > 0 ? (
+        {pendingExpenseOnCardCents > 0 ? (
           <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-2.5 text-[11px] text-zinc-400">
             <span className="font-medium text-zinc-300">
-              + {brl(realExpenseAccountCents)}
+              {brl(pendingExpenseOnCardCents)} de futuros no cartão
             </span>{' '}
-            saíram de contas/carteiras neste mês —{' '}
             <span className="text-zinc-500">
-              não entram no saldo pra não contar pagamento do cartão duas vezes.
+              entram na sobra do mês à esquerda, mas não abatem o saldo nas
+              contas à direita até sair da corrente.
             </span>
           </div>
         ) : null}
@@ -316,29 +328,25 @@ function MonthHero({
 }
 
 /**
- * Projeção de fim do mês. Combina o ritmo diário (só gastos reais até agora)
- * com os gastos futuros já agendados pra estimar onde o mês vai fechar.
+ * Projeção de fim do mês. Combina o ritmo diário dos gastos reais até agora
+ * (cartão + contas) com os gastos futuros já agendados.
  */
 function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
   const { brl, brlSigned } = useMaskedMoney();
   const {
-    realExpenseCreditCents,
-    realExpenseAccountCents,
+    realExpenseCents,
     pendingExpenseCents,
     realIncomeCents,
     pendingIncomeCents,
-    dailyRealCreditRateCents,
+    dailyRealRateCents,
     daysElapsed,
     daysInMonth,
   } = pulse;
 
   const daysLeft = Math.max(0, daysInMonth - daysElapsed);
-  // Mesma regra do hero: projeção considera só cartão + futuros pra formar
-  // saldo (gastos de conta ficam fora pra evitar contar pagamento do cartão
-  // duas vezes). O ritmo aqui também é só do cartão.
-  const projectedRhythmSpendCents = dailyRealCreditRateCents * daysLeft;
+  const projectedRhythmSpendCents = dailyRealRateCents * daysLeft;
   const projectedTotalExpense =
-    realExpenseCreditCents + projectedRhythmSpendCents + pendingExpenseCents;
+    realExpenseCents + projectedRhythmSpendCents + pendingExpenseCents;
   const projectedTotalIncome = realIncomeCents + pendingIncomeCents;
   const projectedLeftover = projectedTotalIncome - projectedTotalExpense;
 
@@ -349,7 +357,7 @@ function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
           Projeção de fim do mês
         </p>
         <p className="text-[11px] text-zinc-500">
-          Baseado em {brl(dailyRealCreditRateCents)}/dia (cartão) × {daysLeft}{' '}
+          Baseado em {brl(dailyRealRateCents)}/dia (real) × {daysLeft}{' '}
           {daysLeft === 1 ? 'dia restante' : 'dias restantes'}
         </p>
       </div>
@@ -365,7 +373,7 @@ function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
           label="Gasto projetado"
           value={brl(projectedTotalExpense)}
           valueClassName="text-rose-200"
-          hint={`Cartão ${brl(realExpenseCreditCents)} + proj. ${brl(projectedRhythmSpendCents)}${
+          hint={`Até agora ${brl(realExpenseCents)} + ritmo ${brl(projectedRhythmSpendCents)}${
             pendingExpenseCents > 0 ? ` + fut. ${brl(pendingExpenseCents)}` : ''
           }`}
         />
@@ -390,15 +398,6 @@ function MonthProjectionCard({ ym, pulse }: { ym: string; pulse: MonthPulse }) {
           }
         />
       </div>
-
-      {realExpenseAccountCents > 0 ? (
-        <p className="mt-3 text-[11px] text-zinc-500">
-          <span className="text-zinc-400">
-            + {brl(realExpenseAccountCents)} em contas/carteiras
-          </span>{' '}
-          não entram na projeção pra não duplicar pagamento do cartão.
-        </p>
-      ) : null}
     </div>
   );
 }
